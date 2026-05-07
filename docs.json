@@ -12,12 +12,12 @@
     "og:site_name": "Hubra Documentation",
     "og:title": "Hubra | Stake SOL with a six-year Solana validator",
     "og:description": "Documentation and developer reference for Hubra: native SOL staking, raSOL liquid staking, instant unstake, USDC Earn, and the agent-callable HTTP API.",
-    "og:image": "https://hubra.app/og-image.png",
+    "og:image": "https://hubra.app/og.png",
     "twitter:card": "summary_large_image",
     "twitter:site": "@hubraapp",
     "twitter:title": "Hubra | Stake SOL with a six-year Solana validator",
     "twitter:description": "Documentation and developer reference for Hubra: native SOL staking, raSOL liquid staking, instant unstake, USDC Earn, and the agent-callable HTTP API.",
-    "twitter:image": "https://hubra.app/og-image.png"
+    "twitter:image": "https://hubra.app/og.png"
   },
   "seo": {
     "indexHiddenPages": false
