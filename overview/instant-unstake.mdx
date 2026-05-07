@@ -1,90 +1,343 @@
 ---
-title: "Instant Unstake"
+title: "Instant unstake"
+description: "Exit a SOL position in a single transaction. Native or liquid, full or partial. Sanctum-routed."
 ---
 
-Hubra lets you unstake your SOL instantly - no waiting for epoch cooldowns. You can unstake your full balance or just a portion.
+Solana's stake program enforces a 2 to 3 day deactivation period. Hubra's instant unstake routes around it through Sanctum's shared LST liquidity layer, so you can exit a position in a single block instead of waiting an epoch.
 
-## Unstake options
-
-<CardGroup cols={2}>
-  <Card title="Full Unstake ⚡" icon="bolt">
-    Unstake your entire staked balance instantly.
-  </Card>
-
-  <Card title="Partial Unstake 📊" icon="chart-pie">
-    Unstake any amount, keep the rest earning rewards.
-  </Card>
-</CardGroup>
-
-## How instant unstake works
-
-Convert your staked SOL to liquid SOL immediately. Powered by [Sanctum](https://sanctum.so).
-
-**Steps:**
-
-1. Select your stake account
-2. Choose full or partial unstake
-3. See the output amount and fees
-4. Confirm the transaction
-5. SOL arrives in your wallet within seconds
+This page covers what's actually happening on-chain, which Sanctum endpoint each path uses, and how to wire the calls programmatically.
 
 <Info>
-  Hubra covers all network fees - you pay zero gas.
+  Hubra charges no protocol fee on unstake. Cost is **price impact only**, dynamic and quoted live by Sanctum, starting from around 0.05% in healthy markets.
 </Info>
 
-## Fees
+---
 
-| Fee | Amount | Description |
+## What it covers
+
+| Source | Output | Path | Sanctum endpoint |
+| --- | --- | --- | --- |
+| Active native stake account | SOL | One transaction | `swap/depositStake` |
+| raSOL | SOL | One transaction | `swap/token` (instant) |
+| raSOL | SOL via stake account | Two phases (~2 to 3d) | `swap/withdrawStake` (slow) |
+| Native stake account (slice) | SOL | Split + route | `StakeProgram.split` then `swap/depositStake` |
+| raUSDC | USDC | Vault direct-withdraw | Voltr `direct-withdraw` (no Sanctum) |
+
+The first three are the Sanctum-routed flows. The last one is included because USDC withdraws are also "instant"; they just don't pass through Sanctum.
+
+---
+
+## How it works under the hood
+
+### Native instant: `depositStake`
+
+Hubra calls Sanctum's order endpoint:
+
+```
+POST https://swap.sanctum.so/v1/swap/depositStake/order
+{
+  "wallet":       "<your-wallet>",
+  "stakeAccount": "<active-stake-account>",
+  "outToken":     "So11111111111111111111111111111111111111112"
+}
+```
+
+Sanctum returns an order response with:
+
+- `tx` — the unsigned transaction (server-normalized to standard base64 by Hubra).
+- `outAmt` — the SOL output in lamports.
+- `swapSrcData.data.priceImpactPct` — the price impact as a fraction.
+
+The transaction does the following on-chain:
+
+1. Re-authorizes the stake account so Sanctum's pool can claim it (`StakeProgram.authorize`).
+2. Calls Sanctum's `depositStake` instruction. The pool absorbs the active stake and mints SOL to the wallet at the pool's current rate.
+3. The pool runs deactivation in the background; you have already exited.
+
+`depositStake` consumes the **entire** stake account. It does not take an amount; partial exits require splitting first (see below).
+
+### Liquid instant: pooled token swap
+
+Same shape, different Sanctum endpoint:
+
+```
+POST https://swap.sanctum.so/v1/swap/token/order
+{
+  "wallet":   "<your-wallet>",
+  "inToken":  "HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX",  // raSOL
+  "outToken": "So11111111111111111111111111111111111111112",   // SOL
+  "amount":   "<lamports>"
+}
+```
+
+The transaction is a routed swap across Sanctum's pooled LST liquidity. Because raSOL is a Sanctum preferred-partner LST, the pool depth is among the deepest on Solana — price impact at typical sizes is materially lower than `depositStake` at the same SOL notional.
+
+### Liquid slow: `withdrawStake`
+
+For when you want zero price impact and can wait an epoch:
+
+```
+POST https://swap.sanctum.so/v1/swap/withdrawStake/order
+{
+  "wallet":      "<your-wallet>",
+  "inToken":    "HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX",
+  "voteAccount": "7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh",
+  "amount":      "<lamports>"
+}
+```
+
+The transaction:
+
+1. Burns your raSOL.
+2. Creates a fresh native stake account, delegated to Hubra's validator, funded with the underlying SOL.
+3. Returns control of the stake account to your wallet.
+
+You then run `StakeProgram.deactivate` manually (or via [`POST /api/v1/unstake`](/developer/endpoints/unstake) with `kind: "deactivate"`), wait for the deactivation epoch, and call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the account.
+
+No fee, no price impact. Costs the same epoch wait as native staking.
+
+---
+
+## Partial unstake on native: how the split works
+
+`depositStake` is all-or-nothing. To exit only part of a native stake account, the source account is **split first**.
+
+```
+existing stake account (10 SOL active)
+        │
+        │  StakeProgram.split
+        ▼
+┌───────────────────┬───────────────────┐
+│  slice (3 SOL)    │  remainder (7 SOL)│
+│   ↓ depositStake  │     keeps earning │
+│   SOL out         │                   │
+└───────────────────┴───────────────────┘
+```
+
+On-chain, the split is a single instruction (`StakeProgram.split`) that creates a new stake account with the same delegation as the parent and the lamports you specified. The split account is `active` from the moment it exists; no re-activation epoch is needed.
+
+The split account is what gets routed through `depositStake`. The remaining stake account keeps earning rewards as if nothing happened.
+
+### Costs
+
+| | |
+| --- | --- |
+| Rent for the new (split) account | ~0.002 SOL |
+| Sanctum price impact on the slice | varies |
+| Hubra protocol fee | None |
+| Network fees | Covered by Hubra |
+
+In the app, the split + route happens inside a single transaction-card flow; you see one quote and one signature.
+
+---
+
+## The order response and `sanctum_order`
+
+Every Sanctum-routed build response carries the **original Sanctum order** alongside the unsigned transaction:
+
+```json
+{
+  "transaction":   "<base64 unsigned tx>",
+  "hubra_token":   "<HMAC>",
+  "route":         "sanctum",
+  "sanctumKind":   "depositStake",
+  "sanctum_order": {
+    "inp":         "...",
+    "out":         "...",
+    "mode":        "ExactIn",
+    "inpAmt":      "...",
+    "outAmt":      "...",
+    "swapSrcData": { "...": "..." },
+    "tx":          "..."
+  },
+  "signers": ["<your-wallet>"]
+}
+```
+
+When broadcasting, the agent must forward `sanctum_order` (along with `sanctumKind`) back to [`POST /api/v1/broadcast`](/developer/endpoints/broadcast) when using `route: "sanctum"`. Sanctum's execute endpoint independently validates the signed transaction's message bytes against the original order and rejects mismatches — that is how the Sanctum router stays safe against tampering.
+
+If you broadcast via `route: "rpc"` (plain RPC), the chain itself does not need the order; the transaction is self-contained. You lose Sanctum's MEV-protected broadcaster, but the on-chain effect is identical.
+
+---
+
+## Sanctum kinds
+
+The `sanctumKind` field tells `/broadcast` which Sanctum execute endpoint to use:
+
+| `sanctumKind` | Used by | Sanctum execute endpoint |
 | --- | --- | --- |
-| Sanctum fee | 0.1-0.5% | Liquidity provider fee (varies by pool liquidity) |
-| Hubra fee | 0.20% | Platform fee (20 bps) |
-| Network fee | ~0.000005 SOL | Covered by Hubra (gasless) |
+| `token` | raSOL → SOL instant unstake; SOL → raSOL stake | `swap/token/execute` |
+| `depositStake` | Native instant unstake | `swap/depositStake/execute` |
+| `withdrawStake` | raSOL slow unstake | `swap/withdrawStake/execute` |
+| `depositSol` | (Reserved; not currently used by Hubra flows) | `swap/depositSol/execute` |
 
-The exact fees are displayed before you confirm. Sanctum fee depends on available liquidity - larger unstakes may have higher price impact.
+Forward the `sanctumKind` from the build response to `/broadcast` verbatim. Mismatching it will return `400 invalid_request`.
 
-<Warning>
-  If price impact exceeds 5%, you'll see a warning. Consider unstaking in smaller portions for large amounts.
-</Warning>
+---
 
-## Partial unstake
+## Quoting before you sign
 
-Unstake any amount - you don't have to unstake everything at once.
+Always quote first for instant unstake at meaningful size. Pool depth changes minute to minute.
 
-**Example:** You have 100 SOL staked. Unstake 30 SOL instantly, keep 70 SOL earning rewards.
+```bash
+curl -X POST https://hubra.app/api/v1/quote \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "sol-liquid-stake",
+    "wallet":   "<your-wallet>",
+    "amount":   "100"
+  }'
+```
 
-### How it works
+Response:
 
-1. Enter an amount less than your total staked balance
-2. Hubra splits your stake account automatically
-3. The unstaked portion converts to SOL instantly
-4. The remaining stake keeps earning rewards
+```json
+{
+  "strategy":       "sol-liquid-stake",
+  "inAsset":        "raSOL",
+  "outAsset":       "SOL",
+  "inAmount":       "100",
+  "outAmount":      "117.42",
+  "priceImpactPct": 0.0028
+}
+```
 
-### Additional fees for partial unstake
+For native instant, pass `stakeAccount` and the active stake amount in SOL:
 
-| Fee | Amount | Notes |
-| --- | --- | --- |
-| Account rent | ~0.002 SOL | One-time fee for creating split account |
+```bash
+curl -X POST https://hubra.app/api/v1/quote \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy":     "sol-native-stake",
+    "wallet":       "<your-wallet>",
+    "stakeAccount": "<active-stake-account>",
+    "amount":       "1.0"
+  }'
+```
 
-<Info>
-  Minimum unstake amount: 0.01 SOL
-</Info>
+Quotes are **non-binding**. Pool state drifts between quote and broadcast; the actual `outAmt` may differ slightly. Treat the quote as a live estimate, not a contract.
 
-## FAQ
+The quote endpoint reuses Sanctum's order endpoint server-side — the unsigned transaction the order also returns is discarded at the boundary. This is why the quote shape mirrors the build shape.
+
+Full reference: [`POST /api/v1/quote`](/developer/endpoints/quote).
+
+---
+
+## When instant pays vs. waiting
+
+Heuristics, not rules. Quote first either way.
+
+| Scenario | Recommendation |
+| --- | --- |
+| < 50 SOL, immediate need | Instant. Price impact is typically negligible. |
+| 50 to 500 SOL, time-sensitive | Instant. Quote first to confirm price impact is below your tolerance. |
+| 500 to 1000 SOL, patient | Slow (deactivate). Standard path, no price impact, no fee. |
+| 1000+ SOL, time-sensitive | Split across multiple instant unstakes over several hours, or split native:liquid. Quote each leg. |
+| 1000+ SOL, patient | Slow (deactivate). The economics dominate the timeline. |
+
+For raSOL specifically, pooled liquidity is deep enough that price impact stays low further up the size curve than native `depositStake`. This is the practical reason raSOL is the preferred entry point for users who anticipate possibly needing instant exit.
+
+---
+
+## Fees, in detail
+
+| Path | Hubra fee | Sanctum fee | Network fee | Other |
+| --- | --- | --- | --- | --- |
+| Native instant | None | Price impact (dynamic) | Covered by Hubra | — |
+| raSOL instant | None | Price impact (dynamic) | Covered by Hubra | — |
+| raSOL slow | None | None | Covered by Hubra | Epoch wait (~2 to 3d) |
+| Partial native instant | None | Price impact on the slice | Covered by Hubra | ~0.002 SOL rent for the split account (covered) |
+| USDC instant | None | None | Covered by Hubra | — |
+
+Price impact comes from the depth of Sanctum's pool at the moment the swap runs. Hubra adds nothing on top. The number you see in the quote is what you pay.
+
+---
+
+## End-to-end example: raSOL instant unstake
+
+```ts
+import { VersionedTransaction, Keypair } from "@solana/web3.js";
+
+// 1. Build
+const build = await fetch("https://hubra.app/api/v1/unstake", {
+  method:  "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    strategy: "sol-liquid-stake",
+    wallet:   wallet.publicKey.toBase58(),
+    amount:   "1.5",
+    kind:     "instant",
+  }),
+}).then((r) => r.json());
+
+const { transaction, hubra_token, route, sanctumKind, sanctum_order } = build;
+
+// 2. Sign
+const tx = VersionedTransaction.deserialize(Buffer.from(transaction, "base64"));
+tx.sign([wallet]);
+const signed = Buffer.from(tx.serialize()).toString("base64");
+
+// 3. Broadcast through Sanctum (MEV-protected)
+const { signature } = await fetch("https://hubra.app/api/v1/broadcast", {
+  method:  "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    signed_tx:     signed,
+    hubra_token,
+    route,
+    sanctumKind,
+    sanctum_order,
+  }),
+}).then((r) => r.json());
+
+console.log(`Confirmed: https://solscan.io/tx/${signature}`);
+```
+
+For native instant, replace `strategy` with `"sol-native-stake"` and add `stakeAccount`. The rest of the shape is identical.
+
+---
+
+## Common questions
 
 <AccordionGroup>
-  <Accordion title="Why is the output less than my staked amount?">
-    Instant unstake uses Sanctum's liquidity pools to swap your stake for SOL immediately. Fees include: Sanctum liquidity fee (0.1-0.5%) plus Hubra platform fee (0.20%). You'll see the exact amounts before confirming.
+  <Accordion title="Why is the SOL output less than what I unstaked?">
+    Sanctum's pool charges price impact for absorbing your stake or your raSOL. Hubra adds nothing on top. Larger unstakes consume more pool liquidity and incur higher impact.
   </Accordion>
 
-  <Accordion title="Is there a minimum unstake amount?">
-    Yes, 0.01 SOL minimum. For partial unstakes, the remaining balance must cover rent exemption (~0.002 SOL).
+  <Accordion title="Is there a minimum?">
+    0.01 SOL on the native and liquid paths. For partial native unstake, the remaining stake account must keep enough lamports to cover rent exemption (~0.002 SOL).
   </Accordion>
 
-  <Accordion title="Can I unstake large amounts?">
-    Yes, but for very large amounts (1000\+ SOL), consider unstaking in portions to minimize price impact from the liquidity pool.
+  <Accordion title="How fast is &quot;instant&quot;?">
+    Single transaction. SOL arrives the moment the transaction confirms (typically a few seconds on Solana mainnet).
   </Accordion>
 
-  <Accordion title="How fast is instant unstake?">
-    SOL arrives in your wallet within seconds of confirming the transaction.
+  <Accordion title="Why use slow if instant works?">
+    Slow has zero cost. If you can wait 2 to 3 days, there is no reason to pay price impact. Instant exists for the cases where waiting is not an option.
+  </Accordion>
+
+  <Accordion title="What happens if my Sanctum order expires before I broadcast?">
+    The unsigned transaction's blockhash expires (~2 minutes), and so does the `hubra_token`. Rebuild via `/unstake` and try again. Sanctum order responses are short-lived for this reason.
+  </Accordion>
+
+  <Accordion title="Can I broadcast a Sanctum-routed tx via plain RPC instead?">
+    Yes — `route: "rpc"` works for any signed transaction. You lose Sanctum's MEV protection and smarter retries, but the on-chain effect is the same.
+  </Accordion>
+
+  <Accordion title="Can agents trigger instant unstake?">
+    Yes. [`POST /api/v1/unstake`](/developer/endpoints/unstake) with `kind: "instant"` returns the unsigned transaction; the agent signs locally and broadcasts.
   </Accordion>
 </AccordionGroup>
+
+---
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Unstake in the app" icon="bolt" href="https://hubra.app/s">
+    Open the app, navigate to your position, choose instant.
+  </Card>
+  <Card title="POST /api/v1/unstake" icon="code" href="/developer/endpoints/unstake">
+    Build an unstake transaction programmatically.
+  </Card>
+</CardGroup>

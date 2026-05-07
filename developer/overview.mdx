@@ -1,0 +1,145 @@
+---
+title: "Developer overview"
+description: "The Hubra Agent API: an HTTP surface that mirrors the human staking app, designed to be callable by AI agents."
+---
+
+The Hubra Agent API is an HTTP surface that does what the Hubra app does, by JSON.
+
+Reads are public. Writes return **unsigned Solana transactions** that the caller signs locally with their own keypair, then submits via `/broadcast`. Hubra never holds a key.
+
+<Info>
+  No API key. No sign-up. No database. The on-chain signature on the actual transaction is what authorizes the user's intent.
+</Info>
+
+---
+
+## What it is
+
+A thin REST layer over the same server actions that power the human Hubra app. There is no second source of truth: when an agent stakes 1 SOL via `POST /api/v1/stake`, the underlying mechanism is identical to a human clicking "Stake" in the UI.
+
+```
+┌──────────────── HUMAN SURFACE ────────────────┐
+│  hubra.app/s — wallet connect, click to stake │
+└───────────────────────────────────────────────┘
+                       │
+                       │  shared server actions
+                       ▼
+┌──────────────── AGENT SURFACE ────────────────┐
+│  api/v1/strategies   list strategies          │
+│  api/v1/quote        preview unstake          │
+│  api/v1/stake        build unsigned tx        │
+│  api/v1/unstake      build unsigned tx        │
+│  api/v1/withdraw     close native stake       │
+│  api/v1/broadcast    submit signed tx         │
+└───────────────────────────────────────────────┘
+```
+
+---
+
+## Auth model
+
+There is no API key. There is no sign-up.
+
+Every endpoint accepts requests from any caller. Authorization comes from the on-chain signature on the actual stake transaction. If the wallet that signed the transaction does not own the assets being staked, the chain rejects the transaction. The HTTP layer adds nothing beyond that.
+
+If you want to attribute requests to a wallet for future loyalty/points, send `X-Hubra-Wallet: <pubkey>` as a header. It is optional and currently informational only.
+
+---
+
+## Base URL and versioning
+
+```
+https://hubra.app/api/v1
+```
+
+All endpoints under `/api/v1`. Breaking changes ship as `/api/v2`.
+
+Every response includes the header:
+
+```
+X-Hubra-Api-Version: v1
+```
+
+---
+
+## Conventions
+
+| | |
+| --- | --- |
+| Content type | `application/json` on requests and successful responses |
+| Error type | `application/problem+json` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)) |
+| Amounts | Decimal strings (`"1.5"`), never floats |
+| CORS | Permissive `Access-Control-Allow-Origin: *` on read endpoints |
+
+For the full conventions reference, see [Conventions](/developer/conventions).
+
+---
+
+## Strategy keys
+
+The four canonical paths:
+
+| Key | Status | Asset | Description |
+| --- | --- | --- | --- |
+| `sol-native-stake` | live | SOL | Direct delegation to Hubra's validator |
+| `sol-liquid-stake` | live | SOL | Mint raSOL via Sanctum |
+| `usdc-earn` | live | USDC | Voltr-routed USDC vault |
+
+For the full strategy reference (intros, steps, on-chain handles), see [Strategies](/developer/strategies) or call [`GET /api/v1/strategies`](/developer/endpoints/list-strategies).
+
+---
+
+## End-to-end flow
+
+```bash
+# 1. Discover
+curl https://hubra.app/api/v1/strategies
+
+# 2. (Optional) Preview an unstake
+curl -X POST https://hubra.app/api/v1/quote \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.5"}'
+
+# 3. Build an unsigned stake tx
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.5"}'
+# → { "transaction": "<base64 unsigned tx>", "hubra_token": "...", ... }
+
+# 4. Sign the tx locally with your Solana keypair
+
+# 5. Broadcast
+curl -X POST https://hubra.app/api/v1/broadcast \
+  -H 'Content-Type: application/json' \
+  -d '{"signed_tx":"<base64 signed tx>","hubra_token":"<from step 3>"}'
+# → { "signature": "5z…", "explorer": "https://solscan.io/tx/5z…" }
+```
+
+---
+
+## The `hubra_token` gate
+
+`/stake` and `/unstake` responses include a `hubra_token` (an HMAC over the unsigned transaction's message bytes). `/broadcast` requires this token; without a matching token, it rejects the request.
+
+This prevents `/broadcast` from being used as a free Solana RPC for arbitrary transactions. Tokens are valid for ~2 minutes (matching Solana's blockhash window). Rebuild via `/stake` or `/unstake` if expired.
+
+For Sanctum-routed flows, you also need to forward `sanctumKind` and `sanctum_order` from the build response to `/broadcast`. See [Hubra token](/developer/hubra-token) for the full mechanics.
+
+---
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="play" href="/developer/quickstart">
+    First request to first stake transaction.
+  </Card>
+  <Card title="Conventions" icon="ruler" href="/developer/conventions">
+    JSON, errors, decimals, CORS.
+  </Card>
+  <Card title="Strategies" icon="layer-group" href="/developer/strategies">
+    The strategy registry.
+  </Card>
+  <Card title="Stake" icon="key" href="/developer/endpoints/stake">
+    `POST /api/v1/stake` reference.
+  </Card>
+</CardGroup>

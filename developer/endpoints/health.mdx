@@ -1,0 +1,58 @@
+---
+title: "GET /health"
+description: "Liveness probe. Confirms the API is wired and reports the deployed commit."
+---
+
+```http
+GET https://hubra.app/api/v1/health
+```
+
+A cheap liveness probe. Confirms the API surface is wired and exposes the version and current commit so callers can tell which build they are talking to.
+
+This endpoint does not call any upstream provider; it is a single-digit-millisecond response.
+
+---
+
+## Request
+
+No parameters, no body, no auth.
+
+```bash
+curl https://hubra.app/api/v1/health
+```
+
+---
+
+## Response
+
+```json
+{
+  "ok":      true,
+  "service": "hubra-agent-api",
+  "version": "v1",
+  "commit":  "<git sha or 'unknown'>",
+  "time":    "2026-05-07T07:39:30.123Z"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `ok` | `boolean` | Always `true` when this endpoint responds; if you cannot reach the API at all, you will get a network error instead. |
+| `service` | `string` | Always `"hubra-agent-api"`. |
+| `version` | `string` | API surface version. Always `"v1"` for this endpoint. |
+| `commit` | `string` | Deployed commit SHA; `"unknown"` in dev or when not injected by the platform. |
+| `time` | `string` | Server time, ISO 8601. |
+
+---
+
+## Use cases
+
+- **Smoke testing** before running a stake flow.
+- **Deploy verification** by comparing `commit` against your expected SHA.
+- **Clock drift checks** by comparing `time` against your local clock.
+
+---
+
+## Errors
+
+This endpoint does not return errors under normal conditions. If you see a non-2xx response, treat it as a network or platform-level outage rather than an API surface issue.

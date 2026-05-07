@@ -1,0 +1,163 @@
+---
+title: "POST /unstake"
+description: "Build an unsigned unstake transaction. Routes by strategy + kind."
+---
+
+```http
+POST https://hubra.app/api/v1/unstake
+```
+
+Build an unsigned unstake transaction. The route depends on `strategy` and `kind`:
+
+| Strategy | `deactivate` | `instant` | `slow` |
+| --- | --- | --- | --- |
+| `sol-native-stake` | `StakeProgram.deactivate` (epoch-bounded ~2.5d) | Sanctum `depositStake` (active stake → SOL immediately) | — |
+| `sol-liquid-stake` | — | Sanctum swap raSOL → SOL via routed liquidity | Sanctum `withdrawStake` (raSOL → native stake account, then standard epoch deactivation) |
+| `usdc-earn` | — | Voltr direct-withdraw (no cooldown, no fee) | — |
+
+The returned `transaction` is base64 unsigned bytes. Sign and broadcast via [`POST /api/v1/broadcast`](/developer/endpoints/broadcast).
+
+---
+
+## Request
+
+```bash
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy":      "sol-native-stake",
+    "wallet":        "<your-wallet>",
+    "stakeAccount":  "<your-stake-account>",
+    "kind":          "deactivate"
+  }'
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `strategy` | `string` | yes | One of `sol-native-stake`, `sol-liquid-stake`, `usdc-earn`. |
+| `wallet` | `string` | yes | Solana wallet pubkey. |
+| `kind` | `"deactivate" \| "instant" \| "slow"` | yes | The unstake mode. See the matrix above for valid combinations. |
+| `amount` | `string` | conditional | Required except for `usdc-earn` with `isWithdrawAll: true`. |
+| `stakeAccount` | `string` | conditional | Required for all `sol-native-stake` calls. The active stake account returned by your earlier `/stake` call. |
+| `isWithdrawAll` | `boolean` | optional | Valid only for `usdc-earn`. When `true`, withdraws the full vault position regardless of `amount`. |
+
+---
+
+## Response shapes
+
+The response shape mirrors `/stake`: `transaction` (base64 unsigned), `hubra_token` (required at `/broadcast`), plus route metadata.
+
+### Sanctum-routed kinds
+
+For `sol-native-stake instant`, `sol-liquid-stake instant`, and `sol-liquid-stake slow`:
+
+```json
+{
+  "strategy":      "sol-liquid-stake",
+  "kind":          "instant",
+  "transaction":   "<base64 unsigned tx>",
+  "hubra_token":   "<token>",
+  "route":         "sanctum",
+  "sanctumKind":   "token",
+  "sanctum_order": { "...": "..." },
+  "signers":       ["<your-wallet>"]
+}
+```
+
+`sanctumKind` varies by route:
+
+| Strategy + kind | `sanctumKind` |
+| --- | --- |
+| `sol-liquid-stake instant` | `token` |
+| `sol-liquid-stake slow` | `withdrawStake` |
+| `sol-native-stake instant` | `depositStake` |
+
+Forward `hubra_token`, `sanctumKind`, and `sanctum_order` to `/broadcast`.
+
+### Voltr-routed (`usdc-earn instant`)
+
+```json
+{
+  "strategy":    "usdc-earn",
+  "kind":        "instant",
+  "transaction": "<base64 unsigned tx>",
+  "hubra_token": "<token>",
+  "route":       "voltr",
+  "signers":     ["<your-wallet>"]
+}
+```
+
+Broadcast via `route: "rpc"`.
+
+### Plain native deactivate (`sol-native-stake deactivate`)
+
+```json
+{
+  "strategy":    "sol-native-stake",
+  "kind":        "deactivate",
+  "transaction": "<base64 unsigned tx>",
+  "hubra_token": "<token>",
+  "signers":     ["<your-wallet>"],
+  "notes":       "Stake becomes withdrawable after the deactivation epoch (~2.5 days). Then call /api/v1/withdraw."
+}
+```
+
+No Sanctum or Voltr involvement. Broadcast via `route: "rpc"`. After the deactivation epoch passes, call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the stake account and pull SOL back.
+
+---
+
+## Examples
+
+```bash
+# Native: epoch-bounded standard unstake
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-native-stake","wallet":"<your-wallet>","stakeAccount":"<your-stake-account>","kind":"deactivate"}'
+
+# Native: instant settlement to SOL via Sanctum
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-native-stake","wallet":"<your-wallet>","stakeAccount":"<your-stake-account>","amount":"1.0","kind":"instant"}'
+
+# Liquid: raSOL → SOL via Sanctum routing (instant)
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.0","kind":"instant"}'
+
+# Liquid: raSOL → stake account, then epoch deactivation (slow)
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.0","kind":"slow"}'
+
+# USDC: full withdraw
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"usdc-earn","wallet":"<your-wallet>","kind":"instant","isWithdrawAll":true}'
+```
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing fields, invalid `kind` for the strategy, or `stakeAccount` missing for `sol-native-stake`. |
+| `404` | `not_found` | Unknown strategy key. |
+| `502` | `upstream_error` | Sanctum / Voltr could not build the transaction. |
+| `503` | `service_unavailable` | Strategy is announced but not live. |
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="POST /quote" icon="magnifying-glass" href="/developer/endpoints/quote">
+    Preview the output before unstaking.
+  </Card>
+  <Card title="POST /withdraw" icon="arrow-down" href="/developer/endpoints/withdraw">
+    Complete a native deactivate.
+  </Card>
+  <Card title="POST /broadcast" icon="paper-plane" href="/developer/endpoints/broadcast">
+    Submit the signed transaction.
+  </Card>
+</CardGroup>

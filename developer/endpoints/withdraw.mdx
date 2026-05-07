@@ -1,0 +1,90 @@
+---
+title: "POST /withdraw"
+description: "Close a native stake account that has reached `inactive` state. Pulls lamports back to the wallet."
+---
+
+```http
+POST https://hubra.app/api/v1/withdraw
+```
+
+Closes a native stake account that has reached `inactive` state. The companion to `/api/v1/unstake` for `sol-native-stake` deactivate flows: deactivate begins the cooldown, this completes the unstake once the deactivation epoch has passed.
+
+By default, withdraws all lamports back to the wallet (closing the account). Pass `lamports` for a partial drain.
+
+---
+
+## Lifecycle
+
+```
+1. POST /api/v1/stake           sol-native-stake → activating  (epoch N)
+2. POST /api/v1/unstake         kind=deactivate  → deactivating (epoch N+1...)
+3. wait for deactivation epoch  → inactive       (~2 to 3 days later)
+4. POST /api/v1/withdraw        → close + refund SOL to wallet
+```
+
+The on-chain stake program enforces step 3. `StakeProgram.withdraw` rejects with `insufficient funds for instruction` if you call it before `currentEpoch > deactivationEpoch`. Do not poll faster than once per epoch.
+
+---
+
+## Request
+
+```bash
+curl -X POST https://hubra.app/api/v1/withdraw \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "wallet":       "<your-wallet>",
+    "stakeAccount": "<pubkey returned by an earlier /stake call>"
+  }'
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `wallet` | `string` | yes | Solana wallet pubkey (the withdraw authority). |
+| `stakeAccount` | `string` | yes | Pubkey of the stake account to close. Returned by your earlier `/stake` call. |
+| `lamports` | `number` | optional | Partial drain. If omitted, withdraws the account's full balance and closes the account. Must be a positive integer when provided. |
+
+---
+
+## Response
+
+```json
+{
+  "strategy":          "sol-native-stake",
+  "transaction":       "<base64 unsigned tx>",
+  "hubra_token":       "<token to pass to /broadcast>",
+  "stakeAccount":      "<echoed>",
+  "withdrawnLamports": 1234567890,
+  "signers":           ["<your-wallet>"],
+  "notes":             "Withdraw closes the stake account if all lamports are pulled."
+}
+```
+
+The wallet (withdrawer authority) is the only required signer. Broadcast via `route: "rpc"` — there is no Sanctum or Voltr involvement.
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing `wallet` or `stakeAccount`, or non-positive `lamports`. |
+| `502` | `upstream_error` | Stake account does not exist on-chain, or RPC rejected the simulation. |
+
+### Common upstream error: "insufficient funds for instruction"
+
+Returned at broadcast time when the stake account has not yet reached `inactive`. Wait until the on-chain epoch is strictly greater than the account's `deactivationEpoch` and try again.
+
+The Solana CLI's `solana stakes` "Inactive Stake: X SOL" line is misleading — it shows the *unlocked portion*, not the account state. The on-chain rule is what matters: an account is `inactive` when `currentEpoch > deactivationEpoch`.
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="POST /unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    Begin deactivation (kind=deactivate).
+  </Card>
+  <Card title="POST /broadcast" icon="paper-plane" href="/developer/endpoints/broadcast">
+    Submit the signed withdraw.
+  </Card>
+</CardGroup>

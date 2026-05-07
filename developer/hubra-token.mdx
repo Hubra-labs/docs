@@ -1,0 +1,122 @@
+---
+title: "Hubra token"
+description: "The HMAC token that gates /broadcast. Why it exists, how it works, what to do with it."
+---
+
+`POST /api/v1/broadcast` requires a `hubra_token` on every call. This page explains why it exists and how to use it.
+
+---
+
+## What it is
+
+A **HMAC token** issued by `/stake`, `/unstake`, and `/withdraw`. The token is computed over the message bytes of the unsigned transaction the endpoint just built.
+
+```
+hubra_token = HMAC(server_secret, message_bytes_of_unsigned_tx)
+```
+
+The token is opaque to the agent. Treat it as a string. Pass it back to `/broadcast` alongside the signed transaction.
+
+---
+
+## Why it exists
+
+Without a gate, `/broadcast` would be a free Solana RPC for arbitrary signed transactions. The server has cost (RPC quota, MEV protection budget, Sanctum execute slots) on every broadcast; allowing arbitrary transactions opens a denial-of-service vector.
+
+The HMAC token binds a specific broadcast to a specific Hubra-built transaction:
+
+- `/broadcast` recomputes the HMAC over the signed transaction's message bytes.
+- If it matches, the broadcast proceeds.
+- If it does not, `/broadcast` returns `403 forbidden`.
+
+This keeps the broadcast endpoint useful only for transactions that Hubra actually built, while staying transparent: the agent does not need to authenticate, register, or carry an API key.
+
+---
+
+## Lifetime
+
+Tokens are valid for **~2 minutes** after issue. This matches Solana's blockhash window: a transaction with an expired blockhash cannot be broadcast successfully anyway, so a longer-lived token would not help.
+
+If your token expires, rebuild via `/stake`, `/unstake`, or `/withdraw` to get a fresh one. The build is cheap.
+
+---
+
+## Sanctum-specific fields
+
+For Sanctum-routed flows, the broadcast also needs `sanctumKind` and `sanctum_order`. These are returned alongside `hubra_token` in the build response:
+
+```json
+{
+  "transaction":   "<base64 unsigned tx>",
+  "hubra_token":   "<HMAC token>",
+  "route":         "sanctum",
+  "sanctumKind":   "token",
+  "sanctum_order": { "...": "..." },
+  ...
+}
+```
+
+Forward all four fields (`hubra_token`, `route`, `sanctumKind`, `sanctum_order`) to `/broadcast`. Sanctum's execute endpoint independently validates the signed transaction against the original `sanctum_order`; without it, Sanctum rejects the broadcast.
+
+For non-Sanctum flows, only `hubra_token` is needed.
+
+---
+
+## What to save
+
+When you call `/stake` or `/unstake`, save:
+
+| | Always | Sanctum-routed only |
+| --- | --- | --- |
+| Required | `transaction`, `hubra_token` | `sanctumKind`, `sanctum_order` |
+
+For `sol-native-stake`, also save `stakeAccount` (the new pubkey) — you need it for future deactivate / withdraw / instant unstake.
+
+---
+
+## What you do not need
+
+You do not need to:
+
+- Decode or parse the token.
+- Refresh it manually (just rebuild if expired).
+- Sign or transform it in any way.
+- Persist it beyond the broadcast.
+
+Treat the token as a single-use, short-lived bearer credential for one specific transaction.
+
+---
+
+## Error: token mismatch
+
+If `/broadcast` returns `403 forbidden`:
+
+```json
+{
+  "type":   "https://hubra.app/errors/forbidden",
+  "title":  "Forbidden",
+  "status": 403,
+  "detail": "hubra_token does not match this transaction or has expired."
+}
+```
+
+Common causes:
+
+- The token has expired (>2 minutes since issue). Rebuild.
+- The signed transaction's message bytes do not match the unsigned bytes (you re-serialized differently). Make sure `tx.serialize()` after signing produces the same message slice as the original.
+- The token belongs to a different transaction (you mixed up two parallel build responses).
+
+In all three cases, the fix is to rebuild the transaction via `/stake` or `/unstake`, sign that new transaction, and broadcast with the new token.
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="POST /broadcast" icon="paper-plane" href="/developer/endpoints/broadcast">
+    The endpoint that uses the token.
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/developer/errors">
+    `403 forbidden` and other error slugs.
+  </Card>
+</CardGroup>

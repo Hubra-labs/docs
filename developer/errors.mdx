@@ -1,0 +1,122 @@
+---
+title: "Errors"
+description: "RFC 9457 problem-details, status codes, and the slug list."
+---
+
+Errors follow [RFC 9457 problem-details](https://www.rfc-editor.org/rfc/rfc9457):
+
+```json
+{
+  "type":    "https://hubra.app/errors/<slug>",
+  "title":   "<short human title>",
+  "status":  <http status code>,
+  "detail":  "<actionable explanation>"
+}
+```
+
+Error responses use `Content-Type: application/problem+json`. Successful responses use plain `application/json`.
+
+---
+
+## Slugs and status codes
+
+| Slug | Status | When you see it |
+| --- | --- | --- |
+| `invalid_request` | `400` | Body missing required fields, malformed JSON, unrecognized `kind`, bad `range` query, etc. |
+| `forbidden` | `403` | `/broadcast` rejected the request because `hubra_token` is missing, wrong, or expired. Rebuild via `/stake` or `/unstake` to get a fresh token. |
+| `not_found` | `404` | Unknown strategy key or unknown route. |
+| `method_not_allowed` | `405` | Hitting a `POST`-only endpoint with `GET`, etc. |
+| `upstream_error` | `502` | Sanctum / Voltr / Solana RPC returned an error or unexpected response. `detail` carries the upstream message when safe. |
+| `service_unavailable` | `503` | Strategy is announced but not live. Includes a `Retry-After` header. |
+| `internal_error` | `500` | Unhandled server error. Should be rare; log the response and retry. |
+
+---
+
+## Branch on `type`, not `title`
+
+The `type` slug is **stable and machine-readable**. The `title` is human-friendly and may evolve. Branch on `type` if you want to recover from specific failure modes:
+
+```ts
+async function broadcastWithRetry(body: object) {
+  const res = await fetch("https://hubra.app/api/v1/broadcast", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    if (err.type?.endsWith("/forbidden")) {
+      // Token expired or mismatched: rebuild.
+      return rebuildAndRetry();
+    }
+    if (err.type?.endsWith("/upstream_error")) {
+      // Transient upstream issue: backoff + retry.
+      return backoffAndRetry();
+    }
+    throw new Error(err.detail ?? err.title);
+  }
+
+  return res.json();
+}
+```
+
+---
+
+## Common patterns
+
+### `502 upstream_error` from `/stake` for `sol-liquid-stake`
+
+Usually means Sanctum could not route a swap for your wallet. Common causes:
+
+- Wallet has no SOL on-chain (no associated account exists).
+- Wallet has no associated token account for raSOL yet.
+- Insufficient liquidity for the size you requested.
+
+Try a smaller amount or verify the wallet is funded.
+
+### `502 upstream_error` from `/broadcast`
+
+Typically means the transaction failed simulation. Common causes:
+
+- Stale blockhash. Rebuild and re-sign.
+- Insufficient fee budget.
+- A missing signature slot.
+- The signing path produced different message bytes than the build path.
+
+### `403 forbidden` from `/broadcast`
+
+`hubra_token` mismatch. See [Hubra token](/developer/hubra-token) for the full list of causes. Fix is always: rebuild via `/stake` or `/unstake`, sign that new transaction, broadcast with the new token.
+
+### `503 service_unavailable` on a strategy
+
+The strategy is announced in the manifest but not yet live. The response includes a `Retry-After` header (typically `3600` seconds). Plan around it; do not retry hot.
+
+---
+
+## Retry policy
+
+Recommended approach by slug:
+
+| Slug | Retry? | How |
+| --- | --- | --- |
+| `invalid_request` | No | Fix the request body. |
+| `forbidden` | Yes, after rebuild | Rebuild via `/stake` or `/unstake`, sign, broadcast. |
+| `not_found` | No | Fix the strategy key or route. |
+| `method_not_allowed` | No | Fix the HTTP method. |
+| `upstream_error` | Yes, with backoff | Exponential backoff. 3 retries max. |
+| `service_unavailable` | Yes, after `Retry-After` | Honor the header. |
+| `internal_error` | Yes, with backoff | Exponential backoff. Report if persistent. |
+
+---
+
+## Reporting bugs
+
+If you hit `internal_error` repeatedly, or an `upstream_error` with a `detail` that does not match any documented upstream behavior, file an issue at [github.com/block-sync-one/hubra](https://github.com/block-sync-one/hubra) or email [hello@hubra.app](mailto:hello@hubra.app).
+
+Include:
+
+- The full request body.
+- The full response body (including `type`, `title`, `status`, `detail`).
+- The `X-Hubra-Api-Version` and any `commit` from `/health`.
+- The approximate time of the request.

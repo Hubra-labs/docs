@@ -1,0 +1,154 @@
+---
+title: "POST /stake"
+description: "Build a Solana transaction that stakes the strategy's input asset. Returns base64 unsigned (or partially signed) bytes."
+---
+
+```http
+POST https://hubra.app/api/v1/stake
+```
+
+Build a Solana transaction that stakes `amount` of the strategy's input asset. The returned `transaction` is **base64-encoded**:
+
+- **Unsigned** for `sol-liquid-stake` and `usdc-earn`.
+- **Partially signed** for `sol-native-stake` (the stake-account slot is pre-signed by the server; you only sign the wallet slot).
+
+The agent signs locally and broadcasts via [`POST /api/v1/broadcast`](/developer/endpoints/broadcast).
+
+---
+
+## Request
+
+```bash
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "sol-liquid-stake",
+    "wallet":   "<your-wallet>",
+    "amount":   "1.5"
+  }'
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `strategy` | `"sol-native-stake" \| "sol-liquid-stake" \| "usdc-earn"` | yes | Which strategy to stake into. |
+| `wallet` | `string` | yes | Solana wallet pubkey (base58) that will sign the transaction. |
+| `amount` | `string` | yes | Amount to stake, decimal string. |
+
+---
+
+## Response — `sol-native-stake`
+
+The server generates a fresh stake-account keypair and pre-signs that signature slot. The agent only signs as the wallet. **Save the returned `stakeAccount` pubkey** — you need it for future deactivate / withdraw / instant-unstake calls against this position.
+
+```json
+{
+  "strategy":                  "sol-native-stake",
+  "transaction":               "<base64 partially-signed tx>",
+  "hubra_token":               "<token to pass to /broadcast>",
+  "stakeAccount":              "<new pubkey to track>",
+  "voteAccount":               "7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh",
+  "rentExemptReserveLamports": 2282880,
+  "delegatedLamports":         1500000000,
+  "signers":                   ["<your-wallet>"],
+  "notes":                     "Stake account keypair was generated and pre-signed server-side."
+}
+```
+
+Broadcast via `route: "rpc"` (no Sanctum involvement on the create + delegate path).
+
+---
+
+## Response — `sol-liquid-stake` (Sanctum-routed)
+
+```json
+{
+  "strategy":      "sol-liquid-stake",
+  "transaction":   "<base64 unsigned tx>",
+  "hubra_token":   "<token to pass to /broadcast>",
+  "route":         "sanctum",
+  "sanctumKind":   "token",
+  "sanctum_order": { "...": "..." },
+  "signers":       ["<your-wallet>"]
+}
+```
+
+When `route: "sanctum"`, the response also carries `sanctumKind` and `sanctum_order`. **All three (`hubra_token`, `sanctumKind`, `sanctum_order`) must be passed back to `/broadcast`** if you want Sanctum's MEV-protected broadcaster. Sanctum's execute endpoint validates the signed transaction against the original order and rejects mismatches.
+
+Plain RPC (`route: "rpc"` at broadcast) works without the Sanctum-specific fields, but loses Sanctum's broadcaster guarantees.
+
+---
+
+## Response — `usdc-earn` (Voltr-routed)
+
+```json
+{
+  "strategy":    "usdc-earn",
+  "transaction": "<base64 unsigned tx>",
+  "hubra_token": "<token to pass to /broadcast>",
+  "route":       "voltr",
+  "signers":     ["<your-wallet>"]
+}
+```
+
+Voltr-routed responses do not include `sanctum_order`. Broadcast via `route: "rpc"` — that is the only supported broadcast path for Voltr transactions.
+
+---
+
+## The `hubra_token`
+
+Every `/stake` (and `/unstake`) response includes a `hubra_token` HMAC'd over the message bytes of the unsigned transaction. `POST /api/v1/broadcast` requires this token and rejects any transaction that was not built by Hubra. **Save it alongside the transaction and pass it back when broadcasting.**
+
+Tokens expire ~2 minutes after issue (matching Solana's blockhash window). If your token expires, rebuild via `/stake`.
+
+For the full mechanics, see [Hubra token](/developer/hubra-token).
+
+---
+
+## Examples
+
+```bash
+# Native delegation to Hubra's validator
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-native-stake","wallet":"<your-wallet>","amount":"1.0"}'
+
+# Liquid: SOL → raSOL via Sanctum
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.0"}'
+
+# USDC vault deposit
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"usdc-earn","wallet":"<your-wallet>","amount":"100"}'
+```
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing or malformed fields. |
+| `404` | `not_found` | Unknown strategy key. |
+| `502` | `upstream_error` | Sanctum / Voltr could not build the transaction (wallet does not exist on-chain, no associated token account, insufficient liquidity for size). |
+| `503` | `service_unavailable` | Strategy is announced but not live. |
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="POST /unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    Reverse the position.
+  </Card>
+  <Card title="POST /broadcast" icon="paper-plane" href="/developer/endpoints/broadcast">
+    Submit the signed transaction.
+  </Card>
+  <Card title="Hubra token" icon="lock" href="/developer/hubra-token">
+    The HMAC gate.
+  </Card>
+  <Card title="Strategies" icon="layer-group" href="/developer/strategies">
+    All strategy keys.
+  </Card>
+</CardGroup>

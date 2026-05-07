@@ -1,147 +1,116 @@
 ---
-title: "Staked SOL yield"
+title: "raSOL"
+description: "Token reference for Hubra's liquid staking token."
 ---
 
-Stake your SOL. Keep it liquid. Earn yield automatically.
-
-raSOL is Hubra's liquid staking token. When you stake SOL on Hubra, you get raSOL back. This token earns staking rewards while staying usable across Solana DeFi.
-
----
-
-## Why liquid staking?
-
-Traditional SOL staking locks your tokens. Need to sell, move funds, or react to a market drop? You wait 2-3 days to unstake.
-
-Liquid staking fixes this. With raSOL you:
-
-- Earn staking rewards (~6% APY) like native staking
-- Stay liquid: sell, swap, or use raSOL anytime
-- Skip the wait: instant unstake available
-- Use in DeFi: deposit raSOL as collateral or into yield strategies
-
-You get staking yield without giving up flexibility.
+raSOL is Hubra's liquid staking token. This page is the **token reference**: addresses, mechanics, infrastructure. For the user-facing product story, see [Liquid staking](/overview/liquid-staking).
 
 ---
 
-## How raSOL works
+## Token data
 
-### The exchange rate model
+| | |
+| --- | --- |
+| Name | raSOL |
+| Symbol | raSOL |
+| Standard | SPL Token |
+| Mint address | `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX` |
+| Decimals | 9 |
+| Infrastructure | Sanctum Infinity |
+| Backing validator | Hubra (vote `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh`) |
 
-raSOL is a reward-bearing token. When you stake SOL, you receive raSOL at the current exchange rate. As staking rewards build up, the exchange rate goes up. Each raSOL becomes worth more SOL over time.
-
-Your raSOL balance stays the same. Its value grows.
-
-- No rewards to claim (yield accrues automatically)
-- No manual compounding (it's built in)
-- Simple tracking (just watch the exchange rate)
-
-### Where does the yield come from?
-
-raSOL is staked to the Hubra validator. The validator earns staking rewards from Solana (currently ~6% APY), and those rewards flow into the raSOL exchange rate.
-
-raSOL runs on [Sanctum](https://sanctum.so) infrastructure, the same system behind many of Solana's top liquid staking tokens.
+[View on Solscan](https://solscan.io/token/HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX).
 
 ---
 
-## Using raSOL in DeFi
+## Token model
 
-raSOL is a Sanctum preferred partner token with deep liquidity across Solana.
+raSOL is a **non-rebasing, value-accruing** receipt token.
 
-- Kamino: Use raSOL as collateral for borrowing
-- Loopscale: Deposit into yield strategies
-- Save: Earn additional yield on your raSOL
-- DEXs: Swap raSOL for any token instantly
+- **Non-rebasing:** the supply per deposit is fixed at mint. Your raSOL balance does not grow over time.
+- **Value-accruing:** the redemption rate (SOL per raSOL) climbs each epoch as the underlying stake earns rewards.
 
-### Sanctum integration
+```
+raSOL_balance × current_rate = your_underlying_SOL
+```
 
-raSOL plugs into Sanctum's unified liquidity layer:
-
-- Deep liquidity: swap large amounts without major slippage
-- Cross-LST swaps: convert between raSOL and other LSTs (JitoSOL, mSOL, etc.)
-- Instant unstake: powered by Sanctum's infrastructure
+Yield is delivered through the rate, not the balance. This is the same model Aave's aTokens, Lido's wstETH, and Sanctum's preferred-partner LSTs use.
 
 ---
 
-## Fees
+## Where the yield comes from
 
-- Staking SOL → raSOL: Free (gasless - on Hubra)
-- Instant unstake: ~0.1-0.5% (varies with liquidity)
-- Standard unstake: Free (2-3 day wait)
-- Using raSOL in DeFi: No Hubra fee (protocol fees may apply)
+Every raSOL is backed by SOL staked to the **Hubra validator**. The validator earns Solana's standard staking rewards at every epoch boundary (~2 to 3 days). Rewards flow into the raSOL exchange rate.
 
-No management fees. No performance fees.
+There is no second yield layer. raSOL's APY is exactly the underlying validator's net APY (issuance × (1 − commission)).
+
+Live APY: [`GET /api/v1/strategies/sol-liquid-stake`](/developer/endpoints/get-strategy).
+
+---
+
+## Where you can use raSOL
+
+raSOL is a Sanctum preferred-partner LST. That status comes with deep pooled liquidity across Solana DeFi:
+
+- **Lending and collateral:** Kamino, Save, Loopscale.
+- **DEX swaps:** Jupiter, Orca, Meteora, Raydium, Titan.
+- **LST-to-LST conversions:** Sanctum router (raSOL ↔ JitoSOL, mSOL, INF, and the rest of the Sanctum LST set).
+
+Because raSOL is a standard SPL token, anything that supports SPL tokens supports raSOL by default.
+
+---
+
+## Redemption paths
+
+Three ways to redeem raSOL for SOL:
+
+| Path | Time | Fee | Mechanics |
+| --- | --- | --- | --- |
+| Sell on a DEX | Instant | DEX fee + price impact | Standard token swap |
+| Sanctum instant unstake | One block | Sanctum price impact only | Pooled LST liquidity swap |
+| Sanctum slow unstake (`withdrawStake`) | ~2 to 3 days | None | raSOL → native stake account → epoch deactivation |
+
+The instant and slow paths run inside the Hubra app; sell-on-DEX you can do anywhere SPL tokens trade.
 
 ---
 
 ## Risks
 
-Liquid staking has risks. Know them before you stake.
+raSOL inherits all native validator risks plus a smart-contract layer.
 
-- **Smart contract risk**
-
-  raSOL relies on smart contracts. Built on audited Sanctum infrastructure, but any smart contract can have bugs. Only stake what you're comfortable exposing to DeFi.
-- **Validator risk**
-
-  raSOL stakes to the Hubra validator. If the validator has downtime or underperforms, rewards may be lower than expected. Hubra monitors performance to maintain competitive yields.
-- **Temporary depeg**
-
-  In extreme markets, raSOL might trade below its fair SOL value on DEXs. Usually temporary. You can always use instant unstake to redeem at the true exchange rate.
-- **No slashing (currently)**
-
-  Solana doesn't have validator slashing yet. If this changes, it could affect staked assets. This applies to all Solana staking, not just raSOL.
+- **Smart-contract risk.** Sanctum infrastructure is heavily used and audited but not invulnerable.
+- **Validator risk.** raSOL's yield depends on Hubra's validator performance.
+- **Temporary depeg.** In stressed markets, raSOL might trade below its fair SOL value on DEXs. Instant unstake redeems at the true exchange rate even when secondary markets wobble.
+- **Liquidity risk.** Very large unstakes may incur material price impact. Quote first.
 
 ---
 
-## FAQ
+## Working with raSOL programmatically
 
-- **What's the current APY?**
+For agents and developers:
 
-  About 6% APY from Solana staking rewards. This fluctuates based on network conditions and validator performance.
-- **Is there a minimum stake amount?**
-
-  No. Stake any amount of SOL.
-- **Do I need SOL for gas fees?**
-
-  No. Hubra covers all network fees for staking and unstaking.
-- **Can I see how much yield I've earned?**
-
-  The Hubra app shows the current raSOL exchange rate. Compare it to when you staked to calculate your earnings.
-- **Where is my SOL actually staked?**
-
-  Delegated to the Hubra validator. The validator earns staking rewards from Solana, which flow into the raSOL exchange rate.
-- **Can I use raSOL outside of Hubra?**
-
-  Yes. raSOL is a standard SPL token. Use it on Kamino, Loopscale, Save, or any DEX.
-- **What if I need my SOL during a crash?**
-
-  That's the point. Instant unstake gets you SOL in seconds, or swap on any DEX. No waiting.
-- **How is raSOL different from JitoSOL or mSOL?**
-
-  Similar base yield. raSOL adds: gasless transactions on Hubra, integrated portfolio view, Sanctum preferred partner liquidity, and one-click DeFi access.
-- **What if Hubra shuts down?**
-
-  raSOL lives in your wallet. You own it regardless of Hubra. Swap on DEXs or use Sanctum directly to unstake.
+- Get the live exchange rate: [`GET /api/v1/strategies/sol-liquid-stake`](/developer/endpoints/get-strategy).
+- Build a stake transaction (SOL → raSOL): [`POST /api/v1/stake`](/developer/endpoints/stake) with `strategy: "sol-liquid-stake"`.
+- Build an unstake transaction (raSOL → SOL): [`POST /api/v1/unstake`](/developer/endpoints/unstake) with `strategy: "sol-liquid-stake"` and `kind: "instant"` or `"slow"`.
 
 ---
 
-## Technical details
+## Common questions
 
-For developers and advanced users:
+<AccordionGroup>
+  <Accordion title="Why doesn't my raSOL balance grow?">
+    raSOL is non-rebasing. Yield lives in the redemption rate, not the balance. Multiply your balance by the current rate (visible in the app or via the API) to see your SOL value.
+  </Accordion>
 
-- Token name: raSOL
-- Token standard: SPL Token
-- Mint address: `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`
-- Decimals: 9
-- Infrastructure: Sanctum Infinity
-- Validator: Hubra Validator
+  <Accordion title="Can I bridge raSOL to other chains?">
+    raSOL is a Solana-native SPL token. Bridge support depends on third-party bridges; we do not maintain bridges directly.
+  </Accordion>
 
-View on Solscan: [HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX](https://solscan.io/token/HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX)
+  <Accordion title="How is raSOL different from JitoSOL or mSOL?">
+    Same primitive, different validator backing. raSOL stakes to Hubra's validator only. JitoSOL and mSOL stake across many validators per their delegation strategies. raSOL also runs entirely on Sanctum's preferred-partner liquidity layer.
+  </Accordion>
 
----
-
-## Get started
-
-1. [Go to hubra.app/earn](https://hubra.app/earn)
-2. Connect wallet (any Solana wallet or email signup)
-3. Stake SOL, receive raSOL
-4. Watch it grow
+  <Accordion title="What if Hubra goes offline?">
+    raSOL is in your wallet, controlled by your keys. You can swap on any DEX, route through Sanctum directly, or hold the position regardless of Hubra's app status.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,169 @@
+---
+title: "Quickstart"
+description: "Mint raSOL by HTTP in under five minutes."
+---
+
+This walks through staking 1 SOL into raSOL using only `curl` and a Solana keypair. The same shape applies to native staking and USDC Earn.
+
+<Info>
+  You need a funded Solana wallet (at least the amount you want to stake plus a few thousand lamports for safety; Hubra covers gas, but you need the asset to stake itself). And a way to sign transactions locally.
+</Info>
+
+---
+
+## 1. Discover the strategies
+
+```bash
+curl https://hubra.app/api/v1/strategies
+```
+
+Response:
+
+```json
+{
+  "strategies": [
+    {
+      "key":    "sol-native-stake",
+      "asset":  "SOL",
+      "title":  "Native",
+      "blurb":  "Delegate SOL to Hubra's validator.",
+      "status": "live",
+      "live":   { "apy": 6.7, "exchangeRate": null }
+    },
+    {
+      "key":    "sol-liquid-stake",
+      "asset":  "SOL",
+      "title":  "Liquid",
+      "blurb":  "Mint raSOL via Sanctum.",
+      "status": "live",
+      "live":   { "apy": 6.4, "exchangeRate": 1.0723 }
+    },
+    {
+      "key":    "usdc-earn",
+      "asset":  "USDC",
+      "title":  "Earn",
+      "blurb":  "Routed USDC vault.",
+      "status": "live",
+      "live":   { "apy": 5.6, "exchangeRate": 1.012 }
+    }
+  ]
+}
+```
+
+Pick `sol-liquid-stake`.
+
+---
+
+## 2. Build the unsigned transaction
+
+```bash
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "sol-liquid-stake",
+    "wallet":   "<your-wallet-pubkey>",
+    "amount":   "1.0"
+  }'
+```
+
+Response:
+
+```json
+{
+  "strategy":      "sol-liquid-stake",
+  "transaction":   "<base64 unsigned tx>",
+  "hubra_token":   "<HMAC token>",
+  "route":         "sanctum",
+  "sanctumKind":   "token",
+  "sanctum_order": { "...": "..." },
+  "signers":       ["<your-wallet>"]
+}
+```
+
+Save `transaction`, `hubra_token`, `sanctumKind`, and `sanctum_order`. You will pass all four back to `/broadcast`.
+
+---
+
+## 3. Sign the transaction
+
+Using `@solana/web3.js`:
+
+```ts
+import { VersionedTransaction, Keypair } from "@solana/web3.js";
+
+const tx = VersionedTransaction.deserialize(
+  Buffer.from(buildResponse.transaction, "base64"),
+);
+tx.sign([wallet]); // wallet is a Keypair you hold
+
+const signed = Buffer.from(tx.serialize()).toString("base64");
+```
+
+For native staking, `tx.sign([wallet])` only fills your wallet's slot. The stake-account slot is pre-signed by Hubra's server.
+
+---
+
+## 4. Broadcast
+
+For Sanctum-routed flows (any liquid stake or instant native unstake), forward the Sanctum-specific fields:
+
+```bash
+curl -X POST https://hubra.app/api/v1/broadcast \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "signed_tx":     "<base64 signed tx>",
+    "hubra_token":   "<from step 2>",
+    "route":         "sanctum",
+    "sanctumKind":   "token",
+    "sanctum_order": { "...": "..." }
+  }'
+```
+
+For non-Sanctum flows (native delegation, native withdraw, USDC Earn), plain RPC is fine:
+
+```bash
+curl -X POST https://hubra.app/api/v1/broadcast \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "signed_tx":   "<base64 signed tx>",
+    "hubra_token": "<from step 2>"
+  }'
+```
+
+Response:
+
+```json
+{
+  "signature": "5z6Z...",
+  "explorer":  "https://solscan.io/tx/5z6Z..."
+}
+```
+
+You now hold raSOL.
+
+---
+
+## Adapting to other strategies
+
+The shape is identical for all three strategies. What changes:
+
+- **Native stake (`sol-native-stake`):** the response includes a fresh `stakeAccount` pubkey. Save it; you need it to deactivate or instant-unstake later. Broadcast via `route: "rpc"` for stake, `route: "sanctum"` for instant unstake.
+- **Liquid stake (`sol-liquid-stake`):** Sanctum-routed always.
+- **USDC Earn (`usdc-earn`):** broadcast via `route: "rpc"`. No `sanctum_order` to forward.
+
+See the per-endpoint references for the response shapes:
+
+<CardGroup cols={2}>
+  <Card title="Stake" icon="key" href="/developer/endpoints/stake">
+    `POST /api/v1/stake`
+  </Card>
+  <Card title="Unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    `POST /api/v1/unstake`
+  </Card>
+  <Card title="Withdraw" icon="arrow-down" href="/developer/endpoints/withdraw">
+    `POST /api/v1/withdraw`
+  </Card>
+  <Card title="Broadcast" icon="paper-plane" href="/developer/endpoints/broadcast">
+    `POST /api/v1/broadcast`
+  </Card>
+</CardGroup>

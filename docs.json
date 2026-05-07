@@ -3,20 +3,20 @@
   "theme": "mint",
   "name": "Hubra",
   "colors": {
-    "primary": "#FEAA01",
-    "light": "#FEAA01",
-    "dark": "#FEAA01"
+    "primary": "#DAA520",
+    "light": "#F5C84B",
+    "dark": "#0A0A0A"
   },
   "favicon": "/favicon.svg",
   "metadata": {
     "og:site_name": "Hubra Documentation",
-    "og:title": "Hubra - Financial Superpowers for Everyone",
-    "og:description": "The easiest way to earn yield on Solana. Deposit crypto, earn automatically. No complexity, no gas fees.",
+    "og:title": "Hubra | Stake SOL with a six-year Solana validator",
+    "og:description": "Documentation and developer reference for Hubra: native SOL staking, raSOL liquid staking, instant unstake, USDC Earn, and the agent-callable HTTP API.",
     "og:image": "https://hubra.app/og-image.png",
     "twitter:card": "summary_large_image",
     "twitter:site": "@hubraapp",
-    "twitter:title": "Hubra - Financial Superpowers for Everyone",
-    "twitter:description": "The easiest way to earn yield on Solana. Deposit crypto, earn automatically.",
+    "twitter:title": "Hubra | Stake SOL with a six-year Solana validator",
+    "twitter:description": "Documentation and developer reference for Hubra: native SOL staking, raSOL liquid staking, instant unstake, USDC Earn, and the agent-callable HTTP API.",
     "twitter:image": "https://hubra.app/og-image.png"
   },
   "seo": {
@@ -31,12 +31,17 @@
           "href": "https://www.hubra.app"
         },
         {
+          "anchor": "App",
+          "icon": "rocket",
+          "href": "https://hubra.app/s"
+        },
+        {
           "anchor": "Discord",
           "icon": "discord",
           "href": "https://discord.hubra.app"
         },
         {
-          "anchor": "News",
+          "anchor": "X",
           "icon": "x",
           "href": "https://x.com/hubraapp"
         }
@@ -50,23 +55,23 @@
             "group": "Getting started",
             "pages": [
               "index",
-              "jump-into-crypto"
+              "overview/quickstart"
             ]
           },
           {
-            "group": "Hubra overview",
+            "group": "Features",
             "pages": [
-              "overview/earn",
-              "overview/copilot",
-              "overview/horus",
-              "general/raSOL",
+              "overview/native-staking",
+              "overview/liquid-staking",
               "overview/instant-unstake",
-              "overview/portfolio"
+              "overview/usdc-earn"
             ]
           },
           {
-            "group": "General",
+            "group": "Resources",
             "pages": [
+              "general/raSOL",
+              "general/raUSDC",
               "general/github",
               "general/press-kit"
             ]
@@ -75,6 +80,47 @@
             "group": "Legal",
             "pages": [
               "legal/terms-and-conditions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developer",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": [
+              "developer/overview",
+              "developer/quickstart",
+              "developer/conventions",
+              "developer/strategies"
+            ]
+          },
+          {
+            "group": "Read endpoints",
+            "pages": [
+              "developer/endpoints/health",
+              "developer/endpoints/list-strategies",
+              "developer/endpoints/get-strategy",
+              "developer/endpoints/apy-history"
+            ]
+          },
+          {
+            "group": "Write endpoints",
+            "pages": [
+              "developer/endpoints/quote",
+              "developer/endpoints/stake",
+              "developer/endpoints/unstake",
+              "developer/endpoints/withdraw",
+              "developer/endpoints/broadcast"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "developer/hubra-token",
+              "developer/errors",
+              "developer/glossary"
             ]
           }
         ]
@@ -94,21 +140,21 @@
     ],
     "primary": {
       "type": "button",
-      "label": "Launch App",
-      "href": "https://hubra.app"
+      "label": "Stake SOL",
+      "href": "https://hubra.app/s"
     }
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {

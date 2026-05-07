@@ -1,0 +1,96 @@
+---
+title: "GET /strategies"
+description: "List every canonical strategy with its live APY and exchange rate."
+---
+
+```http
+GET https://hubra.app/api/v1/strategies
+```
+
+The agent's primary "what can I do here?" entry point. Returns every strategy the API knows about, with the same live numbers the human surface displays.
+
+---
+
+## Request
+
+No parameters, no body, no auth.
+
+```bash
+curl https://hubra.app/api/v1/strategies
+```
+
+---
+
+## Response
+
+```json
+{
+  "strategies": [
+    {
+      "key":    "sol-native-stake",
+      "asset":  "SOL",
+      "title":  "Native",
+      "blurb":  "Delegate SOL to Hubra's validator.",
+      "status": "live",
+      "live":   { "apy": 6.7, "exchangeRate": null }
+    },
+    {
+      "key":    "sol-liquid-stake",
+      "asset":  "SOL",
+      "title":  "Liquid",
+      "blurb":  "Mint raSOL via Sanctum.",
+      "status": "live",
+      "live":   { "apy": 6.4, "exchangeRate": 1.0723 }
+    },
+    {
+      "key":    "usdc-earn",
+      "asset":  "USDC",
+      "title":  "Earn",
+      "blurb":  "Routed USDC vault.",
+      "status": "live",
+      "live":   { "apy": 5.6, "exchangeRate": 1.0123 }
+    }
+  ]
+}
+```
+
+### Item fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `key` | `string` | Canonical strategy key (`sol-native-stake`, `sol-liquid-stake`, `usdc-earn`). Use this to address the strategy in other endpoints. |
+| `asset` | `"SOL" \| "USDC"` | The input asset. |
+| `title` | `string` | Short human-friendly name. Same string the UI shows. |
+| `blurb` | `string` | One-line description. |
+| `status` | `"live" \| "coming_soon"` | Whether the strategy is callable. |
+| `live.apy` | `number \| null` | Headline APY as a percentage (e.g. `6.4` for 6.4%), or `null` if upstream data is unavailable. |
+| `live.exchangeRate` | `number \| null` | Current asset-per-receipt rate. `null` for strategies without a receipt token (native stake). |
+
+---
+
+## When to call
+
+- Once at session start, to discover what is available.
+- Before showing live APY in a UI; the server-side cache window is a few minutes.
+- When the user is comparing strategies side-by-side.
+
+For static metadata (steps, trust labels, on-chain handles) and deeper detail on a single strategy, use [`GET /api/v1/strategies/{key}`](/developer/endpoints/get-strategy).
+
+---
+
+## Errors
+
+This endpoint does not return errors under normal conditions. If an upstream APY lookup fails, the corresponding `live.apy` falls back to `null`; the strategy entry itself is still returned.
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="GET /strategies/:key" icon="circle-info" href="/developer/endpoints/get-strategy">
+    Per-strategy full detail.
+  </Card>
+  <Card title="GET /apy/history" icon="chart-line" href="/developer/endpoints/apy-history">
+    Time-series APY.
+  </Card>
+</CardGroup>

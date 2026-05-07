@@ -1,0 +1,117 @@
+---
+title: "GET /strategies/:key"
+description: "Per-strategy detail: intro, ordered steps, trust labels, on-chain handles, and live numbers."
+---
+
+```http
+GET https://hubra.app/api/v1/strategies/{key}
+```
+
+Full per-strategy context: intro paragraph, ordered steps, trust labels, on-chain handles, and the action kinds the agent surface accepts. Live APY, exchange rate, and any other live data are included alongside the static descriptors so a single call answers "what is this strategy and what is it doing right now?"
+
+---
+
+## Request
+
+```bash
+curl https://hubra.app/api/v1/strategies/sol-liquid-stake
+```
+
+| Path parameter | Type | Description |
+| --- | --- | --- |
+| `key` | `string` | One of the canonical strategy keys: `sol-native-stake`, `sol-liquid-stake`, `usdc-earn`. |
+
+---
+
+## Response (live strategy)
+
+```json
+{
+  "strategy": {
+    "key":    "sol-liquid-stake",
+    "asset":  "SOL",
+    "title":  "Liquid",
+    "blurb":  "Mint raSOL via Sanctum.",
+    "status": "live",
+
+    "intro":  "Mint raSOL by depositing SOL into Hubra's Sanctum-routed pool. Your raSOL is non-rebasing; the SOL redemption rate climbs as the underlying stake earns rewards.",
+
+    "steps": [
+      { "ord": "1", "lead": "Deposit SOL",  "tail": "Routed to Hubra's validator via Sanctum." },
+      { "ord": "2", "lead": "Receive raSOL", "tail": "Non-rebasing, value-accruing receipt." },
+      { "ord": "3", "lead": "Use freely",    "tail": "Hold, swap, lend, or LP across Solana DeFi." }
+    ],
+
+    "trust": [
+      "Self-custody",
+      "No Hubra protocol fee",
+      "Sanctum-audited infrastructure"
+    ],
+
+    "onchain": {
+      "assetMint":     "So11111111111111111111111111111111111111112",
+      "receiptMint":   "HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX",
+      "receiptSymbol": "raSOL"
+    },
+
+    "actions": {
+      "stake":   { "kinds": ["mint"],            "notes": "Mints raSOL via Sanctum's swap router (SOL → raSOL)." },
+      "unstake": { "kinds": ["instant", "slow"], "notes": "`instant` routes raSOL → SOL via Sanctum liquidity. `slow` runs Sanctum withdrawStake to a native stake account, then standard epoch deactivation." }
+    },
+
+    "live": { "apy": 6.4, "exchangeRate": 1.0723 }
+  }
+}
+```
+
+### Field reference
+
+| Field | Description |
+| --- | --- |
+| `intro` | One-paragraph summary an agent can quote to its principal. |
+| `steps` | Numbered steps describing what the strategy does, in order. |
+| `trust` | Trust labels — the same chips the UI shows. |
+| `onchain` | On-chain handles relevant to building transactions against this strategy. Field set varies by strategy. |
+| `actions.stake.kinds` | Action kinds accepted by `POST /api/v1/stake` for this strategy. |
+| `actions.unstake.kinds` | Action kinds accepted by `POST /api/v1/unstake` for this strategy. |
+| `live.apy` | Headline APY as a percentage. |
+| `live.exchangeRate` | Current asset-per-receipt rate. |
+
+The `onchain` field set is strategy-specific:
+
+- **`sol-native-stake`:** `validatorVoteAccount`, `assetMint`.
+- **`sol-liquid-stake`:** `assetMint`, `receiptMint`, `receiptSymbol`.
+- **`usdc-earn`:** `assetMint`, `receiptMint`, `receiptSymbol`, `voltrVault`.
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `404` | `not_found` | Unknown strategy key. See `GET /api/v1/strategies` for the canonical list. |
+| `503` | `service_unavailable` | Strategy is announced but not live yet. Includes a `Retry-After` header. |
+
+Coming-soon example response:
+
+```json
+{
+  "type":   "https://hubra.app/errors/service_unavailable",
+  "title":  "Service unavailable",
+  "status": 503,
+  "detail": "Strategy \"<key>\" is announced but not live yet."
+}
+```
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="GET /strategies" icon="list" href="/developer/endpoints/list-strategies">
+    The full list.
+  </Card>
+  <Card title="POST /stake" icon="key" href="/developer/endpoints/stake">
+    Build a stake tx using one of the strategy keys.
+  </Card>
+</CardGroup>

@@ -1,24 +1,33 @@
 ---
-title: "GitHub Repositories"
-description: "Official Hubra and BlockSync GitHub repositories."
+title: "GitHub"
+description: "Hubra's open-source repositories."
 ---
 
-# 🐙 GitHub – Hubra 
-
-Welcome to the official GitHub space for **Hubra** .\
-Here you’ll find all our open-source projects, app repositories, and developer resources.
+Hubra publishes the parts of its infrastructure that are useful to read. The validator, the vault routing, and the agent surface are all reviewable.
 
 ---
 
-## 📂 Main Organization
+## Organization
 
-👉 [Hubra on GitHub](https://github.com/Hubra-labs)
-
-This is the home for all Hubra-related code and infrastructure.
+[github.com/block-sync-one](https://github.com/block-sync-one) hosts the active codebases.
 
 ---
 
-## 🚀 Hubra Agent vault rebalancer
+## Notable repositories
 
-- **Hubra vault manager**\
-  [https://github.com/Hubra-labs/vaults-rebalancer](https://github.com/Hubra-labs/vaults-rebalancer)
+<CardGroup cols={2}>
+  <Card title="hubra" icon="github" href="https://github.com/block-sync-one/hubra">
+    The main Hubra application: marketing surface, app, and agent API.
+  </Card>
+  <Card title="vaults-rebalancer" icon="github" href="https://github.com/block-sync-one/vaults-rebalancer">
+    The autonomous rebalancer that allocates USDC across whitelisted venues.
+  </Card>
+</CardGroup>
+
+---
+
+## Why open source matters here
+
+The vault rebalancer is the piece of Hubra that decides where USDC moves. Reading the code is the most direct way to verify what the rebalancer can and cannot do, what protocols it has access to, and how it makes allocation decisions.
+
+The validator's vote account is on-chain and verifiable on Solscan; that is its open record. The agent API surface is documented in the [Developer](/developer/overview) tab of these docs.

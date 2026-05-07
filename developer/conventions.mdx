@@ -1,0 +1,163 @@
+---
+title: "Conventions"
+description: "Request shapes, response shapes, error format, and the small rules that apply across all endpoints."
+---
+
+These are the cross-cutting rules. Read them once; they apply to every endpoint.
+
+---
+
+## Base URL
+
+```
+https://hubra.app/api/v1
+```
+
+---
+
+## Content type
+
+Every request and successful response uses `application/json`.
+
+```http
+Content-Type: application/json
+```
+
+Errors use `application/problem+json` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)). See [Errors](/developer/errors) for the format.
+
+---
+
+## Decimal amounts
+
+All amounts are passed and returned as **decimal strings**, not floats.
+
+```json
+{ "amount": "1.5" }
+```
+
+```json
+{ "outAmount": "1.7234" }
+```
+
+This avoids IEEE-754 drift and matches the precision the on-chain stake program enforces. Numeric strings are parsed by the server with full precision; floats are not safe.
+
+The on-chain math itself happens in lamports (1 SOL = 10⁹ lamports) or USDC's smallest unit (10⁶), but you never need to do that conversion: pass `"1.5"`, get back `"1.7234"`, and the server handles the unit math.
+
+---
+
+## Versioning
+
+Every response includes:
+
+```http
+X-Hubra-Api-Version: v1
+```
+
+Breaking changes ship as `/api/v2`. The `v1` surface is committed to API stability for the duration of its deployed life.
+
+---
+
+## CORS
+
+Read endpoints (`GET`) accept any origin:
+
+```http
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Authorization, Content-Type, Idempotency-Key
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+```
+
+Write endpoints accept the same. Tighter origin policy may be applied per-route in future versions.
+
+Preflights (`OPTIONS`) return `204` with the same headers and an empty body.
+
+---
+
+## HTTP methods
+
+| Method | Used for |
+| --- | --- |
+| `GET` | Public reads (strategies, APY history, health) |
+| `POST` | All writes; also any read that takes a request body (e.g., quotes) |
+| `OPTIONS` | CORS preflight |
+
+There is no `PUT`, `PATCH`, or `DELETE` in the v1 surface.
+
+---
+
+## Caching
+
+Read endpoints are `force-dynamic` server-side (no Next.js caching of the response). Upstream data (Sanctum APY, validator APY, Voltr stats) has its own cache windows; expect those to refresh on the order of a few minutes.
+
+If you need the freshest possible APY, hit `/api/v1/strategies` directly rather than reading from a cached client.
+
+---
+
+## Error format
+
+Errors follow [RFC 9457 problem-details](https://www.rfc-editor.org/rfc/rfc9457):
+
+```json
+{
+  "type":    "https://hubra.app/errors/invalid_request",
+  "title":   "Invalid request",
+  "status":  400,
+  "detail":  "Required fields: strategy, wallet, amount."
+}
+```
+
+Branch on `type`, not on `title`. The `type` slug is stable; the `title` is human-friendly and may evolve. See [Errors](/developer/errors) for the full slug list.
+
+---
+
+## Rate limiting
+
+There is currently no rate limit on the v1 surface. As the API matures, per-IP soft limits will be applied. When that ships, responses will include `RateLimit-*` headers ([RFC 9331](https://www.rfc-editor.org/rfc/rfc9331)).
+
+For high-volume callers, contact [hello@hubra.app](mailto:hello@hubra.app) to discuss.
+
+---
+
+## Idempotency
+
+Write endpoints accept `Idempotency-Key: <uuid>` and replay the same response for that key within a 24-hour window. This matters for agent retries, where a network blip might cause a double-build of the same transaction.
+
+```bash
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"strategy":"sol-native-stake","wallet":"<wallet>","amount":"1.0"}'
+```
+
+---
+
+## Authentication
+
+There is none on the v1 surface. The on-chain signature on the actual stake transaction is the only authorization that matters. Any caller can build an unsigned transaction; only the wallet that owns the input asset can sign it.
+
+If a future version adds API keys, the auth header will be:
+
+```http
+Authorization: Bearer hbr_live_<22 base58>
+```
+
+For now, the header is unused.
+
+---
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Strategies" icon="layer-group" href="/developer/strategies">
+    The strategy registry.
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/developer/errors">
+    Problem-details and how to branch on slug.
+  </Card>
+  <Card title="Hubra token" icon="lock" href="/developer/hubra-token">
+    The HMAC gate on /broadcast.
+  </Card>
+  <Card title="Glossary" icon="book" href="/developer/glossary">
+    Solana / staking terminology.
+  </Card>
+</CardGroup>

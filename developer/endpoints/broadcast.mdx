@@ -1,0 +1,144 @@
+---
+title: "POST /broadcast"
+description: "Submit a fully signed transaction. Default route is plain Solana RPC; Sanctum is opt-in for swap flows."
+---
+
+```http
+POST https://hubra.app/api/v1/broadcast
+```
+
+Submit a fully signed transaction. The default route is plain Solana RPC, which works for any signed transaction (Sanctum-built, Voltr-built, native). The chain does not care which builder produced the bytes.
+
+Optional `route: "sanctum"` (with `sanctumKind` and `sanctum_order`) forwards to Sanctum's execute endpoint, which adds MEV protection and smarter retries. Use it when broadcasting transactions that came back from `/stake` or `/unstake` with `route: "sanctum"`.
+
+<Info>
+  `hubra_token` is **required** on every call. Without a matching token, the endpoint rejects the request with `403 forbidden`.
+</Info>
+
+---
+
+## Request
+
+```bash
+curl -X POST https://hubra.app/api/v1/broadcast \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "signed_tx":   "<base64 signed tx>",
+    "hubra_token": "<token from /stake or /unstake response>"
+  }'
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `signed_tx` | `string` | yes | Base64-encoded fully signed transaction. |
+| `hubra_token` | `string` | yes | Token from the matching `/stake` or `/unstake` response. HMAC over the unsigned message bytes. Tokens expire ~2 minutes after issue. |
+| `route` | `"rpc" \| "sanctum"` | optional | Defaults to `"rpc"`. Use `"sanctum"` for Sanctum-routed swap flows. |
+| `sanctumKind` | `"token" \| "depositStake" \| "depositSol" \| "withdrawStake"` | conditional | Required when `route="sanctum"`. Pass through the value from the `/stake` or `/unstake` response. |
+| `sanctum_order` | `object` | conditional | Required when `route="sanctum"`. Pass through the `sanctum_order` object from the `/stake` or `/unstake` response. Sanctum's execute endpoint validates the signed transaction against this. |
+
+---
+
+## Response
+
+```json
+{
+  "signature": "5z6Z...",
+  "explorer":  "https://solscan.io/tx/5z6Z..."
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `signature` | `string` | Base58 on-chain transaction signature. |
+| `explorer` | `string` | Pre-built Solscan link for the signature. |
+
+---
+
+## When to use Sanctum routing
+
+| You came from | Use |
+| --- | --- |
+| `/stake sol-liquid-stake` | `route: "sanctum"` |
+| `/stake sol-native-stake` | `route: "rpc"` |
+| `/stake usdc-earn` | `route: "rpc"` |
+| `/unstake sol-native-stake instant` | `route: "sanctum"` |
+| `/unstake sol-native-stake deactivate` | `route: "rpc"` |
+| `/unstake sol-liquid-stake instant` | `route: "sanctum"` |
+| `/unstake sol-liquid-stake slow` | `route: "sanctum"` |
+| `/unstake usdc-earn instant` | `route: "rpc"` |
+| `/withdraw` | `route: "rpc"` |
+
+The simple rule: if the build response had `route: "sanctum"`, broadcast with `route: "sanctum"` and forward the Sanctum-specific fields.
+
+Sanctum's broadcaster adds MEV protection and smarter retries. Plain RPC works for any signed transaction; the chain itself does not distinguish.
+
+---
+
+## Signing example (Node + `@solana/web3.js`)
+
+```ts
+import { VersionedTransaction, Keypair } from "@solana/web3.js";
+
+// 1. Build the unsigned tx
+const buildResp = await fetch("https://hubra.app/api/v1/stake", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    strategy: "sol-liquid-stake",
+    wallet:   walletPubkey,
+    amount:   "1.0",
+  }),
+}).then((r) => r.json());
+
+const { transaction, hubra_token, route, sanctumKind, sanctum_order } = buildResp;
+
+// 2. Sign locally
+const tx = VersionedTransaction.deserialize(Buffer.from(transaction, "base64"));
+tx.sign([wallet]); // wallet is a Keypair you hold
+const signed = Buffer.from(tx.serialize()).toString("base64");
+
+// 3. Broadcast — forward Sanctum-specific fields when applicable
+const broadcastBody =
+  route === "sanctum"
+    ? { signed_tx: signed, hubra_token, route, sanctumKind, sanctum_order }
+    : { signed_tx: signed, hubra_token };
+
+const { signature } = await fetch("https://hubra.app/api/v1/broadcast", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(broadcastBody),
+}).then((r) => r.json());
+
+console.log(`Confirmed: https://solscan.io/tx/${signature}`);
+```
+
+For `sol-native-stake`, `tx.sign([wallet])` only fills the wallet's slot. The stake-account slot is pre-signed by Hubra's server.
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing `signed_tx`, missing `hubra_token`, missing `sanctum_order` (when `route="sanctum"`), or invalid `route` / `sanctumKind`. |
+| `403` | `forbidden` | `hubra_token` does not match this transaction, is malformed, or has expired. Rebuild via `/stake` or `/unstake` to get a fresh token. |
+| `502` | `upstream_error` | RPC or Sanctum rejected the broadcast (invalid blockhash, signature failure, simulation failure, insufficient funds). |
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Hubra token" icon="lock" href="/developer/hubra-token">
+    The HMAC mechanism in detail.
+  </Card>
+  <Card title="POST /stake" icon="key" href="/developer/endpoints/stake">
+    Build a stake transaction.
+  </Card>
+  <Card title="POST /unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    Build an unstake transaction.
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/developer/errors">
+    Problem-details and slugs.
+  </Card>
+</CardGroup>

@@ -1,0 +1,131 @@
+---
+title: "Native staking"
+description: "Delegate SOL directly to Hubra's validator. Custody stays with your wallet."
+---
+
+Native staking is the cleanest delegation route on Solana. Your wallet creates a stake account, delegates voting rights to Hubra's validator, and remains in full custody throughout. There is no liquid token, no smart-contract layer, and no Hubra-side custody.
+
+<Info>
+  Best when the principal prioritizes self-custody and minimal protocol surface.
+</Info>
+
+---
+
+## How it works
+
+<Steps>
+  <Step title="Create a stake account">
+    A fresh Solana stake account is created from your wallet, funded with the amount you want to stake.
+  </Step>
+  <Step title="Delegate to Hubra's vote account">
+    The stake account is delegated to Hubra's validator at vote identity `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh`. Voting rights move to Hubra; everything else stays with the wallet.
+  </Step>
+  <Step title="Activate over the next epoch">
+    Stake activates at the next epoch boundary (typically within one epoch, about 2 to 3 days). Once active, it earns rewards each epoch.
+  </Step>
+  <Step title="Rewards compound automatically">
+    Solana's stake program adds epoch rewards directly to the stake account. There is nothing to claim, no harvest cycle, no transactions to sign. Compounding is built into the protocol.
+  </Step>
+</Steps>
+
+---
+
+## What you keep
+
+| | |
+| --- | --- |
+| Custody | Your wallet |
+| Stake authority | Your wallet |
+| Withdraw authority | Your wallet |
+| Voting rights | Hubra validator |
+| Smart-contract exposure | None |
+
+The wallet retains both stake authority and withdraw authority. Hubra cannot move, redirect, or claim the stake. The only thing the validator does is vote with the stake's weight.
+
+---
+
+## Rewards
+
+Solana validator rewards are protocol-paid: a share of network issuance distributed to active stake at the end of each epoch, minus the validator's commission.
+
+The math is simple:
+
+```
+your_reward = (your_active_stake / total_active_stake) × epoch_issuance × (1 - commission)
+```
+
+Hubra runs a low-commission validator. The exact APY moves with network inflation, validator performance, and stake-weight composition. Live numbers are visible in the [app](https://hubra.app/s) and via [`GET /api/v1/strategies/sol-native-stake`](/developer/endpoints/get-strategy).
+
+---
+
+## Exiting
+
+Two paths:
+
+### Slow (epoch-bounded, no fee)
+
+`StakeProgram.deactivate` begins the cooldown. Once the deactivation epoch passes (~2 to 3 days), the stake account is `inactive` and you can withdraw the SOL.
+
+This is the cleanest exit. No fee, no liquidity dependency, no third-party protocol.
+
+### Fast (instant, pays price impact)
+
+Hubra routes the active stake account through Sanctum's `depositStake` flow. The active stake is exchanged for SOL in a single transaction. You pay a price-impact fee to Sanctum's LST liquidity pool, which depends on pool depth at the time of the trade.
+
+Useful when you cannot wait for an epoch. See [Instant unstake](/overview/instant-unstake) for the full mechanics.
+
+<Tip>
+  Partial unstake works too. The on-chain stake account is split first, the slice you specified is routed, and the rest stays earning.
+</Tip>
+
+---
+
+## Why choose native
+
+Pick native when:
+
+- You want the smallest possible attack surface. Native staking touches the Solana stake program only. No Sanctum, no Voltr, no Hubra contract.
+- You want voting weight delegated explicitly to a single, identified validator.
+- You do not need raSOL as collateral, LP, or trade bait.
+
+Pick [liquid staking](/overview/liquid-staking) instead when you need a transferable receipt.
+
+---
+
+## Common questions
+
+<AccordionGroup>
+  <Accordion title="Does Hubra ever hold my SOL?">
+    No. Native staking delegates voting rights to Hubra's vote account. The stake account itself is created by, owned by, and controlled by your wallet. The withdraw authority never leaves your keys.
+  </Accordion>
+
+  <Accordion title="What happens at activation?">
+    The stake account begins voting at the next epoch boundary. Until then it is `activating` and earns no rewards. Solana's stake program enforces this. It is not a Hubra-imposed delay.
+  </Accordion>
+
+  <Accordion title="Can I unstake without waiting?">
+    Yes. Hubra routes through Sanctum's `depositStake` for instant settlement. Pays a small price-impact fee. See [Instant unstake](/overview/instant-unstake).
+  </Accordion>
+
+  <Accordion title="Does Hubra cover gas fees?">
+    Yes. The stake transaction, deactivate transaction, and withdraw transaction all run gasless on the Hubra app. You do not need a separate SOL balance for fees.
+  </Accordion>
+
+  <Accordion title="What if Hubra's validator has downtime?">
+    Solana protocol penalties for downtime exist but are mild. A missed slot means a missed vote, which lowers stake-weighted rewards for that epoch. Hubra has a public uptime record stretching back to 2020.
+  </Accordion>
+
+  <Accordion title="Can I move my stake to another validator?">
+    Yes. Native stake is portable. You can deactivate, then redelegate to any validator you choose. Your wallet keeps the stake account either way.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Get started
+
+<Card title="Stake SOL natively" icon="rocket" href="https://hubra.app/s">
+  Open the app, connect a wallet, choose Native.
+</Card>
+
+For programmatic flows, see [`POST /api/v1/stake`](/developer/endpoints/stake) with `strategy: "sol-native-stake"`.

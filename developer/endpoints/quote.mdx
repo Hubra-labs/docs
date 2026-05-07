@@ -1,0 +1,102 @@
+---
+title: "POST /quote"
+description: "Preview an unstake's output amount and price impact before signing."
+---
+
+```http
+POST https://hubra.app/api/v1/quote
+```
+
+Preview the output of an **unstake** without committing. Use this to show price impact and output amount to a user before they sign anything.
+
+Quotes are **non-binding**: pool state drifts between quote and unstake. Treat the returned `outAmount` and `priceImpactPct` as live estimates.
+
+<Info>
+  There is no quote endpoint for staking *into* a strategy. Stake quotes are deterministic: amount in equals amount out at the current receipt rate. Use [`GET /api/v1/strategies/{key}`](/developer/endpoints/get-strategy) to read the rate and compute locally.
+</Info>
+
+---
+
+## Request
+
+```bash
+curl -X POST https://hubra.app/api/v1/quote \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "sol-liquid-stake",
+    "wallet":   "<your-wallet>",
+    "amount":   "1.5"
+  }'
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `strategy` | `"sol-liquid-stake" \| "sol-native-stake"` | yes | Which strategy to quote. |
+| `wallet` | `string` | yes | Solana wallet pubkey (base58). |
+| `amount` | `string` | yes | Amount to unstake, decimal string. |
+| `stakeAccount` | `string` | conditional | Required for `sol-native-stake`: the active stake account being settled. Not used for `sol-liquid-stake`. |
+
+---
+
+## Response — `sol-liquid-stake`
+
+```json
+{
+  "strategy":       "sol-liquid-stake",
+  "inAsset":        "raSOL",
+  "outAsset":       "SOL",
+  "inAmount":       "1.5",
+  "outAmount":      "1.7616",
+  "priceImpactPct": 0.0048
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `inAsset` | `string` | Asset coming in (`raSOL`). |
+| `outAsset` | `string` | Asset going out (`SOL`). |
+| `inAmount` | `string` | Echoed input amount. |
+| `outAmount` | `string` | Estimated SOL out at current pool state. |
+| `priceImpactPct` | `number \| null` | Estimated price impact as a fraction (`0.0048` = 0.48%). `null` if the upstream router did not report one. |
+
+---
+
+## Response — `sol-native-stake` (instant)
+
+```json
+{
+  "strategy":       "sol-native-stake",
+  "kind":           "instant",
+  "inAsset":        "SOL",
+  "outAsset":       "SOL",
+  "inAmount":       "1.0",
+  "outAmount":      "0.9952",
+  "priceImpactPct": 0.0048
+}
+```
+
+Same shape as liquid; the input "asset" is SOL because the active stake account is being settled to SOL via Sanctum's `depositStake`. `kind: "instant"` indicates this is a Sanctum-routed instant unstake quote (the only kind that can be quoted; `deactivate` does not have liquidity-based pricing).
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing `strategy` / `wallet` / `amount`, or `stakeAccount` missing for `sol-native-stake`. Also returned for `usdc-earn` (no quote support). |
+| `404` | `not_found` | Unknown strategy key. |
+| `502` | `upstream_error` | Sanctum's quote router could not produce a number (no liquidity, wallet has no on-chain history, etc.). |
+| `503` | `service_unavailable` | Strategy is announced but not live. |
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="POST /unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    Build the actual unstake transaction.
+  </Card>
+  <Card title="GET /strategies/:key" icon="circle-info" href="/developer/endpoints/get-strategy">
+    Read the current exchange rate.
+  </Card>
+</CardGroup>

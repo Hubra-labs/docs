@@ -1,0 +1,59 @@
+---
+title: "Quickstart"
+description: "Stake your first SOL with Hubra in under five minutes."
+---
+
+This guide gets you from a Solana wallet to a working stake position. No engineering required.
+
+<Steps>
+  <Step title="Open the app">
+    Go to [hubra.app/s](https://hubra.app/s) and connect a Solana wallet (Phantom, Backpack, Solflare, or any other standard wallet).
+  </Step>
+  <Step title="Choose a strategy">
+    The app surfaces the four canonical paths. For SOL, pick **Native** for the cleanest custody surface or **Liquid** if you want a transferable raSOL receipt. For USDC, pick **Earn**.
+
+    See [Strategies](/overview/native-staking) for the trade-offs.
+  </Step>
+  <Step title="Pick an amount">
+    Type the amount of SOL or USDC you want to stake. The app shows the live exchange rate, expected output, and any fees up front. There is no minimum.
+  </Step>
+  <Step title="Sign the transaction">
+    Approve the transaction in your wallet. Hubra covers network fees, so you do not need a SOL balance set aside for gas.
+  </Step>
+  <Step title="Watch your position">
+    Your position shows up immediately on the **Positions** tab. For native stake, the position activates over the next epoch (about 2 to 3 days). For raSOL, the redemption rate begins climbing each epoch from the moment of mint. For USDC Earn, yield accrues continuously.
+  </Step>
+</Steps>
+
+---
+
+## When you want to exit
+
+Three paths, depending on the strategy:
+
+- **Native, slow:** Standard `StakeProgram.deactivate`. Account becomes withdrawable after the deactivation epoch (about 2 to 3 days). No fee.
+- **Native, instant:** Routed through Sanctum's `depositStake`. Active stake settles to SOL in one transaction. Pays a price-impact fee to the LST liquidity pool.
+- **Liquid, instant:** Swap raSOL → SOL through Sanctum's pooled LST liquidity. One transaction, pays price impact only.
+- **Liquid, slow:** `withdrawStake` to a native stake account, then standard epoch deactivation.
+- **USDC, instant:** Voltr direct withdraw. No cooldown, no fee.
+
+The full mechanics live in [Instant unstake](/overview/instant-unstake).
+
+---
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Native staking" icon="key" href="/overview/native-staking">
+    The cleanest delegation route.
+  </Card>
+  <Card title="Liquid staking" icon="droplet" href="/overview/liquid-staking">
+    Stake exposure with a transferable receipt.
+  </Card>
+  <Card title="Instant unstake" icon="bolt" href="/overview/instant-unstake">
+    Exit a position in a single transaction.
+  </Card>
+  <Card title="Developer API" icon="code" href="/developer/overview">
+    Same operations, programmatic.
+  </Card>
+</CardGroup>

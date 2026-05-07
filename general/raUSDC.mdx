@@ -1,0 +1,80 @@
+---
+title: "raUSDC"
+description: "Token reference for the Hubra Earn USDC vault receipt."
+---
+
+raUSDC is the receipt token for the Hubra Earn USDC vault. This page is the **token reference**: addresses, mechanics, and what to do (and not to do) with it. For the user-facing product story, see [USDC Earn](/overview/usdc-earn).
+
+---
+
+## Token data
+
+| | |
+| --- | --- |
+| Name | Hubra Earn USDC |
+| Receipt symbol | raUSDC |
+| Standard | SPL Token (classic, not Token-2022) |
+| Receipt mint | `53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS` |
+| Decimals | 9 |
+| Underlying | USDC (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`) |
+| Vault address | `3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ` |
+| Infrastructure | Voltr |
+| Icon | [Arweave](https://7tjb2jhu6znbujvdbauzmsyhqtp42yedjgncsnsdphwtje7ukszq.arweave.net/_NIdJPT2WhomowgplksHhN_NYINJmik2Q3ntNJP0VLM) |
+
+<Info>
+  raUSDC has **9 decimals**, even though USDC has 6. Voltr vaults mint shares at 9 decimals regardless of the underlying asset. When reading raUSDC balances directly from the chain, scale by `10^9`. The Hubra app surfaces USDC-denominated values to hide this asymmetry.
+</Info>
+
+---
+
+## Token model
+
+Same shape as [raSOL](/general/raSOL): non-rebasing, value-accruing.
+
+- Your raUSDC balance is fixed at mint.
+- The redemption rate (USDC per raUSDC) climbs as the underlying vault earns yield.
+
+```
+raUSDC_balance × current_rate = your_underlying_USDC
+```
+
+The Hubra app does this math for you and displays your USDC value directly. You only see raUSDC if you connect an external wallet.
+
+---
+
+## Where the yield comes from
+
+The Voltr vault routes USDC across audited Solana lending venues (Kamino, Jupiter, and the whitelisted set). Yield from those venues flows into the raUSDC redemption rate.
+
+There is no Hubra fee on the position. The displayed APY is the venue-blended yield net of any underlying market spreads.
+
+---
+
+## Important: do not interact with raUSDC outside Hubra
+
+<Warning>
+  raUSDC represents your working capital in Hubra Earn. **Do not burn, transfer, or trade raUSDC outside the Hubra app.** Removing it from your wallet, or sending it to another address, will result in loss of access to your position.
+</Warning>
+
+Unlike raSOL, raUSDC is not designed for cross-protocol composability. It is a vault-specific receipt token. Withdraws happen by redeeming raUSDC inside the Hubra app, not by trading the token elsewhere.
+
+If you connect an external wallet (Phantom, Backpack, Solflare) and deposit into Earn, raUSDC will appear in that wallet. Treat it as "do not touch" and let the Hubra app handle the redemption.
+
+---
+
+## Working with raUSDC programmatically
+
+- Build a deposit (USDC → raUSDC): [`POST /api/v1/stake`](/developer/endpoints/stake) with `strategy: "usdc-earn"`.
+- Build a withdraw (raUSDC → USDC): [`POST /api/v1/unstake`](/developer/endpoints/unstake) with `strategy: "usdc-earn"` and `kind: "instant"`.
+- Get live vault stats: [`GET /api/v1/strategies/usdc-earn`](/developer/endpoints/get-strategy).
+
+---
+
+## Risks
+
+- **Vault smart-contract risk.** Voltr's vault contracts have been audited but no contract is risk-free.
+- **Adapter risk.** Each integration (Kamino, Jupiter, etc.) carries its own contract surface.
+- **Underlying venue risk.** A failure of an integrated lending market could affect the position.
+- **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
+
+See [USDC Earn](/overview/usdc-earn) for the full risk discussion.

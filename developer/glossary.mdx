@@ -1,0 +1,102 @@
+---
+title: "Glossary"
+description: "Solana primitives, staking flows, and Hubra-specific terms."
+---
+
+A reference for engineers and agents not deeply familiar with Solana's stake program, LSTs, or vault primitives. For positioning and audience context, see the marketing pages instead.
+
+---
+
+## Solana primitives
+
+### Lamport
+Smallest unit of SOL. `1 SOL = 1,000,000,000 lamports` (10⁹). Base unit for on-chain math; user-facing amounts are decimal SOL.
+
+### Pubkey
+Base58-encoded ed25519 public key, 32–44 chars. Identifies wallets, mints, programs, accounts.
+
+### Mint
+Pubkey of the SPL token mint account. `So11111111111111111111111111111111111111112` is wrapped SOL.
+
+### Stake account
+A specific Solana program account holding delegated stake. Created fresh each time via `StakeProgram.createAccount`. Has its own keypair (one-time signer at creation), a staker authority, and a withdrawer authority. Hubra sets both authorities to the user's wallet.
+
+### Vote account
+A Solana program account a validator publishes votes to. Hubra's vote account is `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh`. Stake accounts delegate to a vote account.
+
+### Epoch
+Solana's unit of time, ~2 to 3 days. Stake activation, deactivation, and reward settlement are bounded by epoch transitions.
+
+### Slot
+A leader-assigned time interval on Solana, ~400ms target. An epoch is approximately 432,000 slots.
+
+---
+
+## Staking flows
+
+### Native delegation
+User creates a stake account, funds it from their wallet, delegates it to a vote account. Self-custodial: the wallet retains both staker and withdrawer authority. Rewards mint into the stake account each epoch.
+
+### Liquid staking
+User deposits SOL into a stake pool and receives a transferable receipt token (an LST). Hubra's LST is **raSOL** (`HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`), minted via Sanctum.
+
+### Receipt token / LST
+Liquid Staking Token. raSOL is non-rebasing: the conversion rate to SOL grows each epoch as underlying stake earns rewards. The token itself stays at a fixed supply per deposit; appreciation lives in the rate, not the balance.
+
+### Exchange rate
+SOL per receipt. raSOL trades > 1 SOL/raSOL once it has accrued rewards.
+
+---
+
+## Unstake mechanics
+
+### Deactivation
+`StakeProgram.deactivate`. Begins the epoch-bounded cooldown on a stake account. Account becomes withdrawable after the deactivation epoch passes (typically 1 epoch, worst case 2).
+
+### Slow unstake (LST)
+Convert raSOL → native stake account via Sanctum's `withdrawStake`. Then deactivate normally. Combined ~2 to 3 days settlement.
+
+### Instant unstake (LST)
+Swap raSOL → SOL via routed liquidity (Sanctum's swap router). Pays a small price-impact fee but settles in a block.
+
+### Instant unstake (native)
+Sanctum's `depositStake` consumes an active stake account and returns SOL immediately. Pays a price-impact fee.
+
+### Partial unstake
+Splitting an existing stake account on-chain before routing the slice you specified. Costs ~0.002 SOL of rent (covered by Hubra) for the new account.
+
+---
+
+## USDC vault terms
+
+### raUSDC
+Hubra Earn vault receipt mint (`53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS`). Non-rebasing; appreciates against USDC.
+
+### Voltr vault
+`3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ`. The vault routes USDC across Kamino + Jupiter for blended yield. Withdrawals are instant.
+
+### Adapter
+A whitelisted contract integration that the Voltr vault is allowed to deposit into. Each adapter is independently audited.
+
+---
+
+## Hubra API terms
+
+### Strategy key
+Canonical identifier for a Hubra route: `sol-native-stake`, `sol-liquid-stake`, `usdc-earn`. Used as a path or body parameter on every endpoint that addresses a specific strategy.
+
+### Hubra token
+HMAC over an unsigned transaction's message bytes. Returned by `/stake` / `/unstake` / `/withdraw`, required by `/broadcast`. See [Hubra token](/developer/hubra-token).
+
+### Sanctum order
+The full order response Sanctum returned when building a swap-routed transaction. Hubra forwards this in `sanctum_order` so the agent can pass it to `/broadcast` for Sanctum's execute endpoint to validate.
+
+### Sanctum kind
+The category of Sanctum operation: `token` (raSOL token swap), `depositStake` (active stake → SOL), `depositSol` (SOL → LST), `withdrawStake` (raSOL → native stake account). Required at broadcast time when `route="sanctum"`.
+
+---
+
+## See also
+
+- [raSOL](/general/raSOL) and [raUSDC](/general/raUSDC) for token references.
+- [Solana docs](https://solana.com/docs/economics) for canonical protocol documentation.

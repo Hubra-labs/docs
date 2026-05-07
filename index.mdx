@@ -1,62 +1,69 @@
 ---
-title: "Introduction"
-description: "Learn what Hubra is, why it matters, and how it bridges CeFi simplicity with DeFi freedom."
-sidebarTitle: "Intro to Hubra"
+title: "Hubra"
+description: "Stake SOL with a six-year Solana validator. Native or liquid. Slow or fast."
+sidebarTitle: "Welcome"
 ---
 
 <Frame>
   <img
     src="/images/og.png"
-    alt="Screenshot of hubra"
-    style={{ borderRadius:"0.5rem" }}
+    alt="Hubra"
+    style={{ borderRadius: "0.5rem" }}
   />
 </Frame>
 
-Finance today is split between two worlds:
+Documentation and developer reference for the Hubra staking surface. Pick a feature to read about, or jump to the [Developer](/developer/overview) tab for the agent-callable HTTP API.
 
-- **CeFi (Centralized Finance)** – Smooth onboarding, polished UX, and speed. But at the cost of custody, transparency, and freedom.
-- **DeFi (Decentralized Finance)** – Permissionless, open, and composable. But fragmented, complex, and intimidating for most users.
-
-Both worlds have strengths. Both have flaws.\
-At **Hubra**, we believe the future isn’t about choosing one—it’s about combining the best of both.
-
----
-
-## The Problem with Today’s Finance
-
-### CeFi limits you
-
-Your assets aren’t really yours. Withdrawals, opportunities, and access are controlled by someone else.
-
-### DeFi overwhelms you
-
-Even experienced users struggle with dozens of apps, scattered data, and high friction for simple tasks.
-
-**The result?** Most users either settle for the limits of CeFi or give up on DeFi’s complexity—missing out on what’s possible.
+<CardGroup cols={2}>
+  <Card title="Native staking" icon="key" href="/overview/native-staking">
+    Delegate SOL directly to Hubra's validator. Custody stays with your wallet.
+  </Card>
+  <Card title="Liquid staking" icon="droplet" href="/overview/liquid-staking">
+    Mint raSOL and keep your stake usable across Solana DeFi.
+  </Card>
+  <Card title="Instant unstake" icon="bolt" href="/overview/instant-unstake">
+    Exit native or liquid positions in a single transaction.
+  </Card>
+  <Card title="USDC Earn" icon="dollar-sign" href="/overview/usdc-earn">
+    Stablecoin yield from the same operator, routed through audited venues.
+  </Card>
+</CardGroup>
 
 ---
 
-## Hubra: A Hybrid Path
+## Two surfaces, one operator
 
-Hubra is built to **merge CeFi’s usability with DeFi’s sovereignty**.\
-Think of it as the **hub** where on-chain finance becomes as seamless as centralized platforms—without losing what makes crypto powerful.
+Hubra is built for two audiences in parallel:
 
-### What this means in practice
+- **Humans** use the app at [hubra.app](https://hubra.app/s). Wallet connect, two-click strategy choice, gasless transactions.
+- **Agents** use the [Hubra Agent API](/developer/overview). Plain HTTPS, no API key, unsigned transactions returned for the agent to sign locally.
 
-- **One unified experience** – Portfolio, staking, swaps, and yield in one app.
-- **Self-custody, always** – Your keys, your funds. No compromises.
-- **CeFi-grade design** – Instant actions, intuitive flows, and no clutter.
-- **DeFi-level opportunities** – Access to the full Solana ecosystem: liquid staking, lending, LP, trading, and beyond.
-- **Smart guidance** – Signals, recommendations, and discovery—without the noise.
+Both surfaces call the same underlying server actions, so an agent and a user staking the same amount get an identical on-chain result.
 
 ---
 
-## Why It Matters
+## Public receipts
 
-Hubra is more than a wallet. More than a dashboard.\
-It’s the **bridge between how finance feels today and how it should work tomorrow**:
+| | |
+| --- | --- |
+| Validator vote account | `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh` |
+| raSOL mint | `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX` |
+| raUSDC mint | `53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS` |
+| Voltr USDC vault | `3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ` |
 
-- **As easy as CeFi**
-- **As open as DeFi**
+Verify the validator on Solscan: [vote account](https://solscan.io/account/7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh).
 
-This hybrid approach is how we see the future of finance—accessible, sovereign, and powerful.
+---
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="play" href="/overview/quickstart">
+    Five minutes from "what is this" to "I have raSOL in my wallet".
+  </Card>
+  <Card title="Developer overview" icon="code" href="/developer/overview">
+    The agent-callable HTTP API. No key required.
+  </Card>
+</CardGroup>
+
+For the broader product story (who Hubra is, the validator philosophy, the operator record), visit [hubra.app](https://hubra.app).

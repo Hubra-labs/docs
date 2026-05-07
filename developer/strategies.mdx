@@ -1,0 +1,146 @@
+---
+title: "Strategies"
+description: "The canonical strategy registry. Three keys, three asset routes."
+---
+
+The Hubra Agent API exposes three canonical strategies. Adding a new strategy is one entry in the server-side registry; the agent surface picks it up automatically.
+
+---
+
+## Strategy keys
+
+| Key | Asset | Route | Status |
+| --- | --- | --- | --- |
+| `sol-native-stake` | SOL | Native delegation to Hubra's validator | live |
+| `sol-liquid-stake` | SOL | Mint raSOL via Sanctum | live |
+| `usdc-earn` | USDC | Voltr USDC vault | live |
+
+All three are returned by [`GET /api/v1/strategies`](/developer/endpoints/list-strategies). Each has a detailed view at [`GET /api/v1/strategies/{key}`](/developer/endpoints/get-strategy).
+
+---
+
+## `sol-native-stake`
+
+Direct delegation to Hubra's Solana validator. The agent's wallet creates a stake account, delegates voting rights to Hubra's vote account, and retains both stake authority and withdraw authority.
+
+| | |
+| --- | --- |
+| Asset in | SOL |
+| Asset out | None (you keep the stake account) |
+| Validator vote account | `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh` |
+| Stake actions | `delegate` |
+| Unstake actions | `deactivate`, `instant` |
+
+### Stake mechanics
+
+`POST /api/v1/stake` returns a partially-signed transaction. The server generates a fresh stake-account keypair and pre-signs that signature slot. The agent only signs as the wallet. The new stake-account pubkey is returned in the response under `stakeAccount` — **save it**, you need it for future deactivate / withdraw / instant unstake.
+
+### Unstake mechanics
+
+- `kind: "deactivate"` triggers `StakeProgram.deactivate`. After the deactivation epoch (~2 to 3 days), call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the stake account and pull SOL back.
+- `kind: "instant"` routes the active stake account through Sanctum's `depositStake` for immediate SOL.
+
+Both kinds require the `stakeAccount` pubkey returned by the original `/stake` call.
+
+---
+
+## `sol-liquid-stake`
+
+Mint raSOL by depositing SOL into Sanctum. raSOL is a non-rebasing receipt token for SOL staked with Hubra's validator.
+
+| | |
+| --- | --- |
+| Asset in | SOL |
+| Asset out | raSOL (`HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`) |
+| Stake actions | `mint` |
+| Unstake actions | `instant`, `slow` |
+
+### Stake mechanics
+
+`POST /api/v1/stake` returns an unsigned Sanctum-routed transaction. The response carries `route: "sanctum"`, `sanctumKind: "token"`, and a `sanctum_order` object. **Forward all three (plus `hubra_token`) to `/broadcast`** if you want Sanctum's MEV-protected broadcaster.
+
+### Unstake mechanics
+
+- `kind: "instant"` swaps raSOL → SOL via Sanctum's pooled LST liquidity.
+- `kind: "slow"` runs `Sanctum withdrawStake` to convert raSOL into a native stake account, then standard epoch deactivation.
+
+Both pass through Sanctum and require the Sanctum-specific fields at broadcast time.
+
+---
+
+## `usdc-earn`
+
+Deposit USDC into the Voltr-routed Hubra Earn vault.
+
+| | |
+| --- | --- |
+| Asset in | USDC |
+| Asset out | raUSDC (`53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS`) |
+| Vault | `3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ` |
+| Stake actions | `deposit` |
+| Unstake actions | `instant` |
+
+### Stake mechanics
+
+`POST /api/v1/stake` returns an unsigned Voltr deposit transaction. Broadcast via `route: "rpc"`. There is no `sanctum_order` to forward.
+
+### Unstake mechanics
+
+- `kind: "instant"` runs a Voltr direct withdraw. No cooldown, no fee.
+- Pass `isWithdrawAll: true` to drain the position fully without specifying an amount.
+
+Both broadcast via plain RPC.
+
+---
+
+## Live data
+
+Every strategy entry includes a `live` block with the latest APY and (where applicable) the receipt-rate-to-asset exchange rate.
+
+```json
+{
+  "key":    "sol-liquid-stake",
+  "asset":  "SOL",
+  "title":  "Liquid",
+  "blurb":  "Mint raSOL via Sanctum.",
+  "status": "live",
+  "live":   { "apy": 6.4, "exchangeRate": 1.0723 }
+}
+```
+
+`apy` is a percentage (`6.4` = 6.4%). `exchangeRate` is the current asset-per-receipt rate; null where it does not apply (native staking does not have a receipt token).
+
+For time-series APY, see [`GET /api/v1/apy/history`](/developer/endpoints/apy-history).
+
+---
+
+## Coming soon strategies
+
+The strategy registry can flag a key as `coming_soon` (announced but not live). When that flag is set:
+
+- `GET /api/v1/strategies` returns the entry with `status: "coming_soon"`.
+- `GET /api/v1/strategies/{key}` returns `503 service_unavailable` with a `Retry-After` hint.
+- Stake / unstake / quote calls against the key return `503` until launch.
+
+This keeps the manifest stable: agents can plan around an upcoming strategy without it being a hard failure surface.
+
+There are no `coming_soon` strategies live in the registry today.
+
+---
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="GET /strategies" icon="list" href="/developer/endpoints/list-strategies">
+    List all strategies.
+  </Card>
+  <Card title="GET /strategies/:key" icon="circle-info" href="/developer/endpoints/get-strategy">
+    Per-strategy detail.
+  </Card>
+  <Card title="POST /stake" icon="key" href="/developer/endpoints/stake">
+    Build an unsigned stake tx.
+  </Card>
+  <Card title="POST /unstake" icon="rotate-left" href="/developer/endpoints/unstake">
+    Build an unsigned unstake tx.
+  </Card>
+</CardGroup>

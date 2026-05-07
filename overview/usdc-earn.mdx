@@ -1,0 +1,338 @@
+---
+title: "USDC Earn"
+description: "Stablecoin yield from the Hubra validator operator. Voltr-routed, audited venues, instant withdraws."
+---
+
+USDC Earn is Hubra's stablecoin route. You deposit USDC; the vault routes it across audited Solana lending venues for blended yield. You can withdraw any amount at any time, no cooldown, no fee.
+
+This page is the **feature reference**: how the vault is wired, what the on-chain accounts look like, and what the deposit / withdraw transactions actually do.
+
+---
+
+## Architecture
+
+```
+                    ┌──────────────────────────────┐
+                    │     Hubra Earn (UI / API)    │
+                    └──────────────┬───────────────┘
+                                   │
+                       Builds unsigned tx via
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │   Voltr API (api.voltr.xyz)  │
+                    │   /vault/{vault}/deposit     │
+                    │   /vault/{vault}/direct-     │
+                    │     withdraw                 │
+                    └──────────────┬───────────────┘
+                                   │
+                            On-chain call
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │      Voltr Vault Program      │
+                    │   3maCu...6gNQ (vault PDA)    │
+                    └──────────────┬───────────────┘
+                                   │
+                  Whitelisted adapters route to
+                                   │
+                ┌──────────────────┼──────────────────┐
+                ▼                  ▼                  ▼
+            Kamino             Jupiter            (other)
+           lending             lending           whitelisted
+```
+
+Hubra never holds USDC. The vault is a Solana program account governed by audited contracts; deposits and withdraws happen by the user's wallet calling the vault program directly.
+
+---
+
+## Vault metadata
+
+The full machine-readable metadata for the Hubra Earn USDC vault:
+
+```json
+{
+  "name":              "Hubra Earn USDC",
+  "vaultAddress":      "3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ",
+  "underlyingName":    "USD coin",
+  "assetSymbol":       "USDC",
+  "assetMint":         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "assetTokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "assetIcon":         "/images/tokens/usdc.png",
+  "receiptSymbol":     "raUSDC",
+  "receiptMint":       "53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS",
+  "icon":              "https://7tjb2jhu6znbujvdbauzmsyhqtp42yedjgncsnsdphwtje7ukszq.arweave.net/_NIdJPT2WhomowgplksHhN_NYINJmik2Q3ntNJP0VLM",
+  "decimals":          9
+}
+```
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| `name` | Hubra Earn USDC | Display name. |
+| `vaultAddress` | `3maCu...6gNQ` | The Voltr vault PDA. The on-chain account that holds USDC and routes it to whitelisted adapters. |
+| `underlyingName` | USD coin | Long-form asset name. |
+| `assetSymbol` | USDC | The asset deposited and ultimately withdrawn. |
+| `assetMint` | `EPjFW...Dt1v` | Circle's USDC SPL mint on Solana mainnet. |
+| `assetTokenProgram` | `Tokenk...5DA` | Standard SPL Token program. The vault uses the classic SPL Token interface, not Token-2022. |
+| `assetIcon` | `/images/tokens/usdc.png` | Icon for the underlying asset. |
+| `receiptSymbol` | raUSDC | Symbol of the share token minted on deposit. |
+| `receiptMint` | `53fZa...QiSS` | The raUSDC SPL mint. Owned by the vault program. |
+| `icon` | Arweave URL | Icon for the receipt token. Hosted on Arweave for permanence. |
+| `decimals` | 9 | **raUSDC decimals.** Voltr vaults mint shares at 9 decimals regardless of the underlying asset's decimals (USDC is 6). The vault handles the unit conversion internally. |
+
+<Info>
+  USDC has 6 decimals on-chain (`1.50 USDC = 1_500_000` base units). raUSDC has 9 decimals. When reading raUSDC balances directly from the chain, scale by `10^9`, not `10^6`. The Hubra app and API surface USDC-denominated values to hide this asymmetry.
+</Info>
+
+All four addresses are verifiable on Solscan.
+
+The vault is built on the **Voltr** vault program. The receipt token (raUSDC) is minted by the vault when you deposit, and burned by the vault when you withdraw. Hubra does not control the mint; the vault program does.
+
+---
+
+## Deposit flow (technical)
+
+### What happens
+
+1. Hubra's API calls `POST https://api.voltr.xyz/vault/3maCu...6gNQ/deposit`.
+2. Voltr returns an unsigned base64 transaction. Hubra normalizes it to standard base64 and forwards.
+3. The transaction includes:
+   - SPL Token transfer instruction: USDC from your associated token account to the vault.
+   - Voltr vault deposit instruction: mints raUSDC at the current share price.
+   - (If needed) Associated token account creation for raUSDC.
+4. Your wallet signs.
+5. The transaction is broadcast. On confirmation, USDC is in the vault, raUSDC is in your wallet.
+
+### Request shape (Voltr API, called server-side)
+
+```json
+{
+  "userPubkey":        "<wallet>",
+  "lamportAmount":     "<USDC base units>",
+  "assetMint":         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "assetTokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+}
+```
+
+`lamportAmount` is the USDC amount in base units. With USDC decimals = 6, `1.50 USDC = 1_500_000` base units. Hubra's API takes a decimal string from the caller and converts to base units server-side.
+
+### Share-price math
+
+raUSDC is minted at the current share price:
+
+```
+raUSDC_minted = USDC_deposited / share_price
+```
+
+Share price climbs over time as the vault's underlying allocations earn yield. Read it via Voltr's `/vault/{vault}/share-price` endpoint, surfaced through Hubra's [`GET /api/v1/strategies/usdc-earn`](/developer/endpoints/get-strategy).
+
+### Programmatic deposit
+
+```bash
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "usdc-earn",
+    "wallet":   "<your-wallet>",
+    "amount":   "100"
+  }'
+```
+
+Response:
+
+```json
+{
+  "strategy":    "usdc-earn",
+  "transaction": "<base64 unsigned tx>",
+  "hubra_token": "<HMAC token>",
+  "route":       "voltr",
+  "signers":     ["<your-wallet>"]
+}
+```
+
+Sign the transaction locally and broadcast via [`POST /api/v1/broadcast`](/developer/endpoints/broadcast) with `route: "rpc"`. There is no Sanctum involvement; plain RPC handles the broadcast.
+
+---
+
+## Withdraw flow (technical)
+
+USDC Earn supports **direct withdraw** only. Other Voltr vaults can have queued withdraws with a `withdrawalWaitingPeriod`; this one does not.
+
+### Direct withdraw
+
+`POST https://api.voltr.xyz/vault/3maCu...6gNQ/direct-withdraw` returns an unsigned transaction that:
+
+1. Burns your raUSDC.
+2. Transfers USDC from the vault to your associated USDC token account.
+3. Settles in a single transaction. No cooldown.
+
+### `isWithdrawAll` semantics
+
+Two withdraw modes:
+
+| Mode | What it does |
+| --- | --- |
+| Specific amount | Burns the exact raUSDC needed to redeem `amount` USDC at the current share price. |
+| Withdraw all | Burns your entire raUSDC balance. The `amount` field is ignored when `isWithdrawAll: true`. |
+
+Use `isWithdrawAll: true` when you want to drain the position fully without computing the exact raUSDC count. The vault handles the math.
+
+### Programmatic withdraw
+
+```bash
+# Specific amount
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy": "usdc-earn",
+    "wallet":   "<your-wallet>",
+    "amount":   "500",
+    "kind":     "instant"
+  }'
+
+# Full withdraw
+curl -X POST https://hubra.app/api/v1/unstake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy":      "usdc-earn",
+    "wallet":        "<your-wallet>",
+    "kind":          "instant",
+    "isWithdrawAll": true
+  }'
+```
+
+Both return `route: "voltr"`. Broadcast via `route: "rpc"`.
+
+---
+
+## Whitelisted adapters
+
+The Voltr vault program is configured with a whitelist of **adapters**: the only contracts the vault is allowed to deposit USDC into. Each adapter is independently audited.
+
+The current adapter set includes lending markets on:
+
+- **Kamino** — automated lending
+- **Jupiter** — lend infrastructure
+
+The full integration list is on-chain and exposed via Voltr's vault snapshot endpoint:
+
+```bash
+curl https://api.voltr.xyz/vault/3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ
+```
+
+The `integrations` array in the response shows each `adaptorPk` (the adapter program account) and its `whitelisted` flag.
+
+The autonomous **rebalancer** decides where USDC moves between adapters based on relative yield. The rebalancer source code is public:
+
+<Card title="vaults-rebalancer" icon="github" href="https://github.com/block-sync-one/vaults-rebalancer">
+  Read the allocation logic on GitHub.
+</Card>
+
+---
+
+## Fee structure
+
+Voltr's vault fee config has four slots; for the Hubra Earn vault, each is set as follows:
+
+| Fee | Description | Hubra Earn value |
+| --- | --- | --- |
+| `performanceFee` | Cut of yield earned | 0% |
+| `managementFee` | Annualized AUM fee | 0% |
+| `issuanceFee` | Charged on deposit | 0% |
+| `redemptionFee` | Charged on withdraw | 0% |
+
+The displayed APY is the venue-blended yield net of any underlying market spreads (e.g., Kamino's reserve fee on its lending markets). Those are not Hubra fees; they are baked into the upstream's quoted APY.
+
+Verify the fee config on-chain via `fetchUsdcVaultStats()` (`/vault/{vault}/feeConfiguration`).
+
+---
+
+## raUSDC: do not touch outside Hubra
+
+<Warning>
+  raUSDC is **not** designed for cross-protocol composability. Do not transfer, swap, or burn raUSDC outside the Hubra app.
+</Warning>
+
+Unlike raSOL (which is a Sanctum preferred-partner LST with deep liquidity across Solana DeFi), raUSDC is a vault-specific receipt. Withdraws happen by burning raUSDC inside the vault; trading raUSDC on a DEX is not supported and will result in loss of access to the position.
+
+If you connect an external wallet (Phantom, Backpack, Solflare) and deposit into Earn, raUSDC will appear in that wallet. Treat it as "do not touch."
+
+For the full token reference, see [raUSDC](/general/raUSDC).
+
+---
+
+## Reading vault state
+
+Three useful Voltr endpoints (called server-side by Hubra; surfaced through the agent API):
+
+| Voltr endpoint | Hubra surface |
+| --- | --- |
+| `GET /vault/{vault}` | [`GET /api/v1/strategies/usdc-earn`](/developer/endpoints/get-strategy) |
+| `GET /vault/{vault}/share-price` | Embedded in `live.exchangeRate` |
+| `GET /vaults/user/{wallet}/interest-earned` | Surfaced in the Hubra app's portfolio view |
+
+The vault snapshot returns the full state: `totalValue`, `apy.{oneDay,sevenDays,thirtyDays,allTime}`, `dailyStats.apyData[]`, `allocations[]`, `integrations[]`, `feeConfiguration`. Hubra surfaces the headline numbers; the full snapshot is one HTTP call away if you need the rest.
+
+---
+
+## Risks
+
+USDC Earn is **distinct from validator staking risk**. You are exposed to:
+
+- **Vault smart-contract risk.** Voltr's vault program. Audited (Sec3 X-RAY, FYEO) but no contract is risk-free.
+- **Adapter risk.** Each whitelisted adapter is its own contract surface.
+- **Underlying venue risk.** Kamino, Jupiter, etc. — each has its own audit and operational history.
+- **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
+
+| Component | Auditor | Status |
+| --- | --- | --- |
+| Vault program | Sec3 X-RAY | Passed |
+| Adapter programs | Sec3 X-RAY | Passed |
+| Vault program | FYEO | Passed |
+
+<Warning>
+  Only deposit what you can afford to expose to Solana DeFi risk. No yield product is fully risk-free.
+</Warning>
+
+---
+
+## Common questions
+
+<AccordionGroup>
+  <Accordion title="Why is the response transaction sometimes large?">
+    The transaction may include an associated token account (ATA) creation for raUSDC if your wallet has not held it before. ATA creation costs ~0.002 SOL of rent (covered by Hubra in the app, paid by the wallet for direct API callers).
+  </Accordion>
+
+  <Accordion title="Can I deposit USDT, USDS, or other stablecoins?">
+    The current vault is USDC-only. Deposits in other tokens would need to be swapped to USDC first.
+  </Accordion>
+
+  <Accordion title="What is the difference between `direct-withdraw` and a queued withdraw?">
+    Voltr's vault program supports both. The Hubra Earn vault is configured for direct (instant) withdraws — `withdrawalWaitingPeriod` is 0. A queued withdraw would require waiting `withdrawalWaitingPeriod` seconds before the funds settle. Not used here.
+  </Accordion>
+
+  <Accordion title="How does yield show up?">
+    The raUSDC redemption rate climbs continuously as the underlying allocations earn yield. Your raUSDC balance stays fixed; each unit becomes worth more USDC over time.
+  </Accordion>
+
+  <Accordion title="Is my principal guaranteed?">
+    No. Like any DeFi yield product, USDC Earn's principal carries smart-contract, protocol, and stablecoin risk.
+  </Accordion>
+
+  <Accordion title="Where can I see exactly where my USDC is right now?">
+    Call Voltr's vault snapshot endpoint and read the `allocations[]` array. Each entry shows the org name, strategy description, and `positionValue` of vault-deployed USDC at that venue.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Deposit USDC" icon="dollar-sign" href="https://hubra.app/s">
+    Open the app and choose Earn.
+  </Card>
+  <Card title="POST /api/v1/stake" icon="code" href="/developer/endpoints/stake">
+    Build a deposit transaction programmatically.
+  </Card>
+</CardGroup>

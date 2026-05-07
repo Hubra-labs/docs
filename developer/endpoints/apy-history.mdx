@@ -1,0 +1,86 @@
+---
+title: "GET /apy/history"
+description: "Time-series APY for any live strategy."
+---
+
+```http
+GET https://hubra.app/api/v1/apy/history?strategy={key}&range={range}
+```
+
+Time-series APY for any live strategy. Backed by the same upstreams the human chart reads:
+
+- **Sanctum** for `sol-liquid-stake` (raSOL).
+- **thevalidators.io** for `sol-native-stake` (Hubra validator).
+- **Voltr** for `usdc-earn`.
+
+---
+
+## Request
+
+```bash
+curl "https://hubra.app/api/v1/apy/history?strategy=sol-liquid-stake&range=3M"
+```
+
+| Query parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `strategy` | `string` | yes | Canonical strategy key. |
+| `range` | `"1M" \| "3M" \| "6M" \| "All"` | no | Time range. Default `"1M"`. |
+
+---
+
+## Response
+
+```json
+{
+  "strategy": "sol-liquid-stake",
+  "range":    "3M",
+  "points": [
+    { "date": "2026-02-07", "apy": 5.78 },
+    { "date": "2026-02-14", "apy": 5.82 },
+    { "date": "2026-02-21", "apy": 5.91 },
+    { "date": "2026-02-28", "apy": 6.04 }
+  ]
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `strategy` | `string` | Echoed strategy key. |
+| `range` | `string` | Echoed range (`"1M"` if not specified). |
+| `points` | `{ date, apy }[]` | Time-series points, ordered oldest → newest. |
+| `points[].date` | `string` | ISO 8601 date. |
+| `points[].apy` | `number` | APY as a percentage. |
+
+The number of points returned depends on the range and the upstream's resolution. `"All"` returns the full series the upstream provides.
+
+---
+
+## Errors
+
+| Status | Slug | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | Missing `strategy` or invalid `range`. |
+| `404` | `not_found` | Unknown strategy key. |
+| `502` | `upstream_error` | Upstream provider could not return history (Sanctum / thevalidators.io / Voltr unreachable or unparseable). |
+| `503` | `service_unavailable` | Strategy is announced but not live; no APY history yet. |
+
+Example invalid range:
+
+```json
+{
+  "type":   "https://hubra.app/errors/invalid_request",
+  "title":  "Invalid request",
+  "status": 400,
+  "detail": "Invalid range \"BAD\". Expected one of: 1M, 3M, 6M, All."
+}
+```
+
+---
+
+## When to call
+
+- Rendering a chart to the user.
+- Computing rolling averages or comparing strategies.
+- Auditing performance of a position over time.
+
+For the latest single APY number (not a series), call [`GET /api/v1/strategies/{key}`](/developer/endpoints/get-strategy) instead — it is a single round-trip and always fresh.
