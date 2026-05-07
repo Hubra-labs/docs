@@ -6,9 +6,20 @@ sidebarTitle: "Welcome"
 
 <Frame>
   <img
+    src="/images/hubra-og-image.png"
+    alt="Hubra"
+    style={{ borderRadius: "0.5rem" }}
+    lightAlt="Hubra"
+    darkAlt="Hubra"
+    className="dark:hidden"
+  />
+  <img
     src="/images/og.png"
     alt="Hubra"
     style={{ borderRadius: "0.5rem" }}
+    lightAlt="Hubra"
+    darkAlt="Hubra"
+    className="hidden dark:block"
   />
 </Frame>
 
@@ -18,12 +29,15 @@ Documentation and developer reference for the Hubra staking surface. Pick a feat
   <Card title="Native staking" icon="key" href="/overview/native-staking">
     Delegate SOL directly to Hubra's validator. Custody stays with your wallet.
   </Card>
+
   <Card title="Liquid staking" icon="droplet" href="/overview/liquid-staking">
     Mint raSOL and keep your stake usable across Solana DeFi.
   </Card>
+
   <Card title="Instant unstake" icon="bolt" href="/overview/instant-unstake">
     Exit native or liquid positions in a single transaction.
   </Card>
+
   <Card title="USDC Earn" icon="dollar-sign" href="/overview/usdc-earn">
     Stablecoin yield from the same operator, routed through audited venues.
   </Card>
@@ -44,7 +58,7 @@ Both surfaces call the same underlying server actions, so an agent and a user st
 
 ## Public receipts
 
-| | |
+|  |  |
 | --- | --- |
 | Validator vote account | `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh` |
 | raSOL mint | `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX` |
@@ -61,6 +75,7 @@ Verify the validator on Solscan: [vote account](https://solscan.io/account/7K8DV
   <Card title="Quickstart" icon="play" href="/overview/quickstart">
     Five minutes from "what is this" to "I have raSOL in my wallet".
   </Card>
+
   <Card title="Developer overview" icon="code" href="/developer/overview">
     The agent-callable HTTP API. No key required.
   </Card>
