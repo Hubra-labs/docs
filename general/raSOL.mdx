@@ -9,9 +9,9 @@ raSOL is Hubra's liquid staking token. This page is the **token reference**: add
 
 ## Token data
 
-| | |
+|  |  |
 | --- | --- |
-| Name | raSOL |
+| Name | Hubra staked SOL |
 | Symbol | raSOL |
 | Standard | SPL Token |
 | Mint address | `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX` |
@@ -30,7 +30,7 @@ raSOL is a **non-rebasing, value-accruing** receipt token.
 - **Non-rebasing:** the supply per deposit is fixed at mint. Your raSOL balance does not grow over time.
 - **Value-accruing:** the redemption rate (SOL per raSOL) climbs each epoch as the underlying stake earns rewards.
 
-```
+```text
 raSOL_balance × current_rate = your_underlying_SOL
 ```
 
@@ -66,7 +66,7 @@ Three ways to redeem raSOL for SOL:
 
 | Path | Time | Fee | Mechanics |
 | --- | --- | --- | --- |
-| Sell on a DEX | Instant | DEX fee + price impact | Standard token swap |
+| Sell on a DEX | Instant | DEX fee \+ price impact | Standard token swap |
 | Sanctum instant unstake | One block | Sanctum price impact only | Pooled LST liquidity swap |
 | Sanctum slow unstake (`withdrawStake`) | ~2 to 3 days | None | raSOL → native stake account → epoch deactivation |
 
