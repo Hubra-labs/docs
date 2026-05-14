@@ -15,6 +15,7 @@ The public source of truth for Hubra's logos, marks, and brand assets. Everythin
 | `hubra-mark.svg` | The mark alone — favicons, avatars, app tiles |
 | `hubra-mark.png` | The mark alone, raster (300×308) |
 | `hubra-icon.svg` | The mark on the gold app-icon tile |
+| `hubra-icon.png` | The app-icon tile, raster (1000×1000) |
 
 ### `social/`
 
