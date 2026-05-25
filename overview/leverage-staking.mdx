@@ -1,9 +1,9 @@
 ---
-title: "Leverage raSOL"
+title: "Leverage staking"
 description: "Auto-managed leveraged raSOL. Built on Voltr's audited vault program with Hubra's rasol-max adapter on Save × MarginFi."
 ---
 
-Leverage raSOL is Hubra's amplified staking route. You deposit raSOL; the strategy posts it as collateral on Save Finance, borrows SOL against it, and atomically converts that borrowed SOL into more raSOL collateral through a flash-loan + Sanctum swap. The loop runs at a target leverage configured on the strategy, so your stake earns Solana validator rewards on a raSOL position larger than your principal — net of the SOL borrow cost.
+Leverage staking is Hubra's amplified staking route. You deposit raSOL; the strategy posts it as collateral on Save Finance, borrows SOL against it, and atomically converts that borrowed SOL into more raSOL collateral through a flash-loan + Sanctum swap. The loop runs at a target leverage configured on the strategy, so your stake earns Solana validator rewards on a raSOL position larger than your principal — net of the SOL borrow cost.
 
 The receipt token is **raSOL Max**, an LP share of the levered position. Burn it at any time to redeem your raSOL at the current rate. No cooldown.
 
@@ -216,10 +216,6 @@ Leverage adds two risk dimensions on top of plain [Liquid staking](/overview/liq
     The strategy targets a configured leverage (read from the on-chain config). The live value drifts inside a band as rates and positions move. The hard cap (`maxLeverageBps`) is enforced by the strategy and cannot be exceeded.
   </Accordion>
 
-  <Accordion title="Can I trade raSOL Max on a DEX?">
-    No. raSOL Max is a vault receipt, not a Sanctum LST. Trading it outside the Hubra app is unsupported and will result in loss of access to the underlying position. Always withdraw through the app.
-  </Accordion>
-
   <Accordion title="Why are some withdraw transactions bigger than others?">
     When the vault has enough idle raSOL, withdraw is a single instruction (`vault-idle`). When it needs to unwind a slice of the levered position, the SDK builds a MarginFi flash-loan-bracketed transaction (`flash-bracket`) with 8–9 instructions and an address lookup table. Both settle in one signature.
   </Accordion>
@@ -241,7 +237,7 @@ Leverage adds two risk dimensions on top of plain [Liquid staking](/overview/liq
 
 ## Get started
 
-<Card title="Leverage raSOL" icon="bolt" href="https://hubra.app/c/leverage">
+<Card title="Leverage staking" icon="bolt" href="https://hubra.app/c/leverage">
   Open the app, connect a wallet, deposit raSOL.
 </Card>
 
