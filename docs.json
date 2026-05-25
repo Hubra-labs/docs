@@ -63,6 +63,7 @@
             "pages": [
               "overview/native-staking",
               "overview/liquid-staking",
+              "overview/leverage-staking",
               "overview/instant-unstake",
               "overview/usdc-earn"
             ]

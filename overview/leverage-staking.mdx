@@ -1,0 +1,248 @@
+---
+title: "Leverage raSOL"
+description: "Auto-managed leveraged raSOL. Built on Voltr's audited vault program with Hubra's rasol-max adapter on Save × MarginFi."
+---
+
+Leverage raSOL is Hubra's amplified staking route. You deposit raSOL; the strategy posts it as collateral on Save Finance, borrows SOL against it, and atomically converts that borrowed SOL into more raSOL collateral through a flash-loan + Sanctum swap. The loop runs at a target leverage configured on the strategy, so your stake earns Solana validator rewards on a raSOL position larger than your principal — net of the SOL borrow cost.
+
+The receipt token is **raSOL Max**, an LP share of the levered position. Burn it at any time to redeem your raSOL at the current rate. No cooldown.
+
+<Info>
+  Best when you want to amplify raSOL's staking yield and accept variable-borrow + liquidation risk. For unlevered exposure, use [Liquid staking](/overview/liquid-staking).
+</Info>
+
+---
+
+## How raSOL Max works
+
+Each leverage cycle is a single atomic transaction:
+
+```
+   deposit raSOL  ──►  Save collateral
+                            │
+                            ▼
+            ┌──────────────────────────────┐
+            │  1. flash-borrow SOL         │  ◄── MarginFi v2 (0 fee)
+            │  2. Sanctum-swap SOL → raSOL │  ◄── stake-pool-native rate
+            │  3. deposit raSOL on Save    │
+            │  4. borrow SOL on Save       │
+            │  5. repay flash with SOL     │
+            └──────────────────────────────┘
+                            │
+                            ▼
+              more raSOL collateral, more SOL debt
+                            │
+                  loop until target leverage
+```
+
+The position is held at a configured **target leverage** (max 2.75×). The adapter rebalances on its own: levers up when the SOL borrow rate sits comfortably below raSOL's staking yield, and pulls back when it spikes. There is nothing to manage from the user side.
+
+Swaps go through **Sanctum** — the router for SOL → raSOL and Sanctum Infinity (INF) for raSOL → SOL — which prices at the stake pool's native rate with no AMM spread. The flash bracket uses **MarginFi v2's** 0-fee flash loan, so the only cost per cycle is Sanctum's tiny slippage allowance (capped at 0.15%).
+
+### Net yield
+
+```
+net_APY ≈ (raSOL_staking_APY × live_leverage) − (SOL_borrow_APY × (live_leverage − 1))
+```
+
+`live_leverage` drifts inside a band around the target as rates and prices move. `SOL_borrow_APY` is the variable SOL borrow rate on Save's SOL reserve — that's what the levered SOL debt accrues at. The headline APY in the app is computed live from current strategy state and reflects both legs.
+
+### raSOL Max token
+
+raSOL Max is the LP share of the vault. It is **not** a Sanctum LST and is **not** designed for cross-protocol use.
+
+|  |  |
+| --- | --- |
+| Symbol | raSOL Max |
+| Underlying | raSOL |
+| Mints / burns | Voltr vault program |
+| Composability | Hubra app only — do not trade or transfer externally |
+
+The exchange rate `raSOL / raSOL Max` climbs over time as the levered position earns. Your raSOL Max balance stays fixed; redemption value grows.
+
+---
+
+## What's audited, what's not
+
+This is the part to read carefully.
+
+<Warning>
+  The vault program is audited. The Hubra **adapter** that drives the leverage loop is **not yet audited**. Treat raSOL Max as experimental and only deposit what you can afford to expose to smart-contract risk.
+</Warning>
+
+### Vault layer — audited
+
+The vault is built on the **[Voltr](https://voltr.xyz) vault program** — the same program family used by Hubra's [USDC Earn](/overview/usdc-earn) product. Voltr's vault program has been audited by Sec3 X-RAY and FYEO.
+
+| Component | Auditor | Status |
+| --- | --- | --- |
+| Voltr vault program | Sec3 X-RAY | Passed |
+| Voltr vault program | FYEO | Passed |
+
+The vault owns the raSOL deposit, owns the raSOL Max mint, enforces the share-price math on deposit/withdraw, and only allows whitelisted adapters to act on the assets it holds.
+
+### Adapter layer — not audited
+
+The leverage loop itself lives in Hubra's **`rasol-max` adapter** — the program that the vault calls into to deposit raSOL on Save, flash-borrow SOL from MarginFi, Sanctum-swap between SOL and raSOL, and rebalance the position. The adapter is whitelisted on the vault, but the adapter code has **not been independently audited**.
+
+What the adapter can and cannot do is bounded by the vault:
+
+- It can route vault assets only to the configured venues (Save, MarginFi, Sanctum).
+- It cannot move assets to arbitrary destinations — the vault's whitelist is enforced on every call.
+- It cannot mint or burn raSOL Max outside the vault's share-price logic.
+
+That containment matters: a bug in the adapter can affect strategy performance (worse fills, mis-targeted leverage, stuck positions), but it cannot drain the vault to an external destination. Audit is still the right next step and is on the roadmap.
+
+---
+
+## Venues
+
+The strategy composes three external Solana protocols, each with a distinct role:
+
+| Venue | Role | Why |
+| --- | --- | --- |
+| **Save Finance** (main pool) | Lending venue. raSOL is the collateral reserve; SOL is the borrow reserve; the strategy owns a single Save obligation. | Deep raSOL collateral capacity and a SOL reserve with predictable rates. |
+| **MarginFi v2** (main group) | Flash-loan venue. Each lever-up / lever-down / redemption is wrapped in a `start_flashloan` / `end_flashloan` bracket, borrowing SOL for the duration of one transaction. | 0 protocol fee on flash loans (since 2026-05). The cheapest flash venue on Solana for SOL. |
+| **Sanctum** | Swap venue. Sanctum router for SOL → raSOL, Sanctum Infinity (INF) for raSOL → SOL. | Stake-pool-native pricing — no AMM spread, deeper than reserve-bounded direct withdrawals. |
+
+All three are public protocols with their own audit posture (each audited by multiple firms; see their respective documentation). Each carries its own protocol risk independent of Hubra or Voltr.
+
+The adapter never sends assets to a destination outside this set — the vault's whitelist enforces it on every call.
+
+---
+
+## Deposit and withdraw
+
+Both flows happen as single user-signed transactions through the SDK.
+
+### Deposit
+
+You sign one transaction. The vault accepts your raSOL, the adapter routes it into the lending market and opens / extends the levered loop, and raSOL Max is minted to your wallet at the current share price.
+
+```
+raSOL_max_minted = raSOL_deposited × (lpSupply / tvlRasol)
+```
+
+When the vault is empty (bootstrap), the rate is 1:1.
+
+### Withdraw
+
+You burn raSOL Max and receive raSOL back at the current rate. Two on-chain paths, chosen automatically by the SDK:
+
+| Path | When it runs | Shape |
+| --- | --- | --- |
+| `vault-idle` | The vault has enough idle raSOL to cover the redemption directly (typical right after a fresh deposit, before the next lever-up cycle). | Single instruction. |
+| `flash-bracket` | The redemption requires unwinding a slice of the levered position. | 8–9 instructions wrapped in a MarginFi flash-loan bracket: borrow SOL, repay your share of Save's SOL debt, withdraw and redeem the matching raSOL collateral, Sanctum-swap raSOL → SOL to refund the flash, and park the residual raSOL as your payout. Uses an address lookup table to fit under Solana's 1232-byte tx envelope. |
+
+Both settle in one transaction. **No cooldown, no queue, no waiting period.** No manager or admin signature is required — you sign everything yourself.
+
+The first time you ever redeem, the SDK lazily prepends an init instruction to create your **per-user MarginFi account PDA** (a one-time rent of ~0.005 SOL). The PDA is deterministic from your wallet — no off-chain bookkeeping — and is reused on every subsequent redemption.
+
+```
+raSOL_returned = raSOL_max_burned × (tvlRasol / lpSupply)
+```
+
+---
+
+## Strategy state
+
+The strategy publishes its live state on-chain. Hubra's app reads it via the `@hubra-labs/rasol-max` SDK:
+
+| Field | Meaning |
+| --- | --- |
+| `tvlRasol` / `tvlSol` | NAV in raSOL lamports, plus its SOL-equivalent at the live stake-pool rate. |
+| `lpSupply` | raSOL Max outstanding. |
+| `navPerLp` | NAV per LP share (raSOL per raSOL Max, scaled). |
+| `obligationCollateralCtoken` | raSOL collateral posted on Save (in Save cToken units; appreciates over time as Save's raSOL reserve accrues). |
+| `obligationDebtSol` | SOL debt outstanding on Save's SOL reserve. |
+| `leverageBps` | Live leverage of the position (`collateral / equity`). |
+| `targetLeverageBps` | Configured target leverage. |
+| `maxLeverageBps` | Hard cap (≤ 27,500 = 2.75×). The strategy will never exceed this. |
+| `borrowAprBps` / `collateralSupplyAprBps` / `stakeYieldAprBps` | Live Save SOL borrow APR, raSOL supply APR, and the off-chain raSOL stake-pool yield premium — the three inputs the SDK uses to project net yield. |
+| `strategyApyBps` | SDK's simple linear net-APY estimate (pessimistic; ignores compounding). |
+| `paused` | When `true`, deposits and withdrawals are disabled. |
+
+The app surfaces the headline numbers; the SDK exposes the full state if you need to read it directly.
+
+---
+
+## Risks
+
+Leverage adds two risk dimensions on top of plain [Liquid staking](/overview/liquid-staking):
+
+- **Variable net yield.** When Save's SOL borrow rate rises, net APY shrinks — sometimes sharply. Yield can go negative for short windows if borrow cost exceeds leveraged staking yield. The rebalancer de-levers in that case, but not instantaneously.
+- **Liquidation risk.** Save uses the SOL/USD Pyth feed for both reserves and treats raSOL 1:1 with SOL in its LTV math. Sudden divergence between raSOL's market price and its stake-pool fair value, or oracle movement, can push the position toward liquidation. The strategy targets a leverage well below Save's liquidation threshold and rebalances actively, but liquidation is not impossible.
+- **Swap-rate risk.** Every lever-up / lever-down / redemption Sanctum-swaps between SOL and raSOL. Slippage is capped at 0.15% per swap, but persistent dislocation between raSOL and SOL can compound across cycles.
+- **Adapter smart-contract risk.** The `rasol-max` adapter is not audited. The vault containment limits blast radius, but adapter bugs can still degrade strategy performance.
+- **Vault smart-contract risk.** Audited (Sec3 X-RAY, FYEO) — but no contract is risk-free.
+- **Venue risk.** Save, MarginFi, and Sanctum each carry their own protocol risk independent of Hubra.
+- **Pause risk.** When the strategy is paused (admin response to a market or protocol event), deposits and withdrawals are temporarily disabled. The position itself continues to be managed.
+
+<Warning>
+  raSOL Max is an experimental, leveraged product. Only deposit what you can afford to expose to smart-contract and market risk.
+</Warning>
+
+---
+
+## Comparing the routes
+
+| | Native | Liquid (raSOL) | Leverage (raSOL Max) |
+| --- | --- | --- | --- |
+| Yield source | Validator | Validator | Validator × leverage − SOL borrow cost |
+| Smart-contract layers | None | Sanctum | Voltr vault + `rasol-max` adapter + Save + MarginFi (flash) + Sanctum (swap) |
+| Audit status | n/a | Sanctum audited | Vault audited; adapter not yet; Save, MarginFi, Sanctum each audited |
+| Withdraw speed | One epoch | One epoch (slow) / single tx (instant) | Single tx |
+| Variability | Low | Low | Higher — SOL borrow rates and leverage drift |
+| Liquidation risk | None | None | Yes (bounded by target leverage, Save LTV) |
+
+---
+
+## Common questions
+
+<AccordionGroup>
+  <Accordion title="Is raSOL Max audited?">
+    The Voltr vault program that holds your raSOL is audited (Sec3 X-RAY, FYEO). The Hubra `rasol-max` adapter that drives the leverage loop is **not yet audited**. Audit is on the roadmap.
+  </Accordion>
+
+  <Accordion title="Can the adapter drain the vault?">
+    No. The vault enforces a whitelist of destinations on every call. The adapter can only route vault assets into the configured lending markets and back. It cannot send assets to an arbitrary address.
+  </Accordion>
+
+  <Accordion title="What happens if borrow rates spike above staking yield?">
+    Net APY shrinks and can briefly go negative. The borrow cost in question is Save's variable SOL borrow rate — that's the liability side of the levered position. The rebalancer de-levers (via `rebalance_down`) when SOL borrow costs exceed leveraged staking yield by a healthy margin. The position stays manageable; the headline number on the page reflects the live reading.
+  </Accordion>
+
+  <Accordion title="What is the leverage target?">
+    The strategy targets a configured leverage (read from the on-chain config). The live value drifts inside a band as rates and positions move. The hard cap (`maxLeverageBps`) is enforced by the strategy and cannot be exceeded.
+  </Accordion>
+
+  <Accordion title="Can I trade raSOL Max on a DEX?">
+    No. raSOL Max is a vault receipt, not a Sanctum LST. Trading it outside the Hubra app is unsupported and will result in loss of access to the underlying position. Always withdraw through the app.
+  </Accordion>
+
+  <Accordion title="Why are some withdraw transactions bigger than others?">
+    When the vault has enough idle raSOL, withdraw is a single instruction (`vault-idle`). When it needs to unwind a slice of the levered position, the SDK builds a MarginFi flash-loan-bracketed transaction (`flash-bracket`) with 8–9 instructions and an address lookup table. Both settle in one signature.
+  </Accordion>
+
+  <Accordion title="What's the per-user MarginFi account I see on first withdraw?">
+    The flash-loan bracket needs a MarginFi account whose authority is the user's wallet (MarginFi enforces this on the inner borrow/repay). The SDK derives a deterministic per-user PDA and lazily prepends an init instruction the first time you redeem through the flash path — a one-time rent of ~0.005 SOL. The PDA is reused on every subsequent redemption; no off-chain bookkeeping is involved.
+  </Accordion>
+
+  <Accordion title="Is there a minimum deposit?">
+    No. Deposit any amount of raSOL.
+  </Accordion>
+
+  <Accordion title="Do I need SOL for gas?">
+    A small amount for the signature itself. The flash-bracket withdraw is more compute-heavy than a plain transfer; budget accordingly. Plus the one-time ~0.005 SOL rent for your MarginFi PDA on first withdraw.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Get started
+
+<Card title="Leverage raSOL" icon="bolt" href="https://hubra.app/c/leverage">
+  Open the app, connect a wallet, deposit raSOL.
+</Card>
+
+For unlevered exposure, see [Liquid staking](/overview/liquid-staking). For the raSOL token reference, see [raSOL](/general/raSOL).
