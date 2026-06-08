@@ -11,7 +11,10 @@ Time-series APY for any live strategy. Backed by the same upstreams the human ch
 
 - **Sanctum** for `sol-liquid-stake` (raSOL).
 - **thevalidators.io** for `sol-native-stake` (Hubra validator).
+- **rasol-max daily-cron snapshot** for `sol-leveraged-stake` (per-epoch points; the same series the leverage page's bar chart shows).
 - **Voltr** for `usdc-earn`.
+
+`sol-leveraged-stake` only writes one row per epoch (~12 points retained), and the upstream doesn't slice into 1M / 3M / 6M windows the way Sanctum and thevalidators.io do — the same series is returned under every `range` so the response shape stays consistent across strategies.
 
 ---
 

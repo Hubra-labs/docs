@@ -39,6 +39,14 @@ Response:
       "live":   { "apy": 6.4, "exchangeRate": 1.0723 }
     },
     {
+      "key":    "sol-leveraged-stake",
+      "asset":  "SOL",
+      "title":  "Leveraged raSOL Max",
+      "blurb":  "Auto-managed leveraged raSOL. Amplified staking yield, no active management.",
+      "status": "live",
+      "live":   { "apy": 9.93, "exchangeRate": 1.1988 }
+    },
+    {
       "key":    "usdc-earn",
       "asset":  "USDC",
       "title":  "Earn",
@@ -50,7 +58,7 @@ Response:
 }
 ```
 
-Pick `sol-liquid-stake`.
+Pick `sol-liquid-stake`. (For raSOL Max, the entry is live but the stake / unstake builders aren't wired through the agent API yet — route users to `hubra.app/c/leverage`. See [Strategies → `sol-leveraged-stake`](/developer/strategies#sol-leveraged-stake).)
 
 ---
 
@@ -145,11 +153,12 @@ You now hold raSOL.
 
 ## Adapting to other strategies
 
-The shape is identical for all three strategies. What changes:
+The shape is identical for the three agent-callable strategies. What changes:
 
 - **Native stake (`sol-native-stake`):** the response includes a fresh `stakeAccount` pubkey. Save it; you need it to deactivate or instant-unstake later. Broadcast via `route: "rpc"` for stake, `route: "sanctum"` for instant unstake.
 - **Liquid stake (`sol-liquid-stake`):** Sanctum-routed always.
 - **USDC Earn (`usdc-earn`):** broadcast via `route: "rpc"`. No `sanctum_order` to forward.
+- **Leveraged raSOL Max (`sol-leveraged-stake`):** listed by the registry with live APY and NAV-per-LP, but `actions.stake` / `actions.unstake` are `null` — the deposit / burn builders aren't agent-callable yet. Hand off to `hubra.app/c/leverage` for the actual transaction.
 
 See the per-endpoint references for the response shapes:
 

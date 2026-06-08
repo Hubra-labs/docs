@@ -43,6 +43,14 @@ curl https://hubra.app/api/v1/strategies
       "live":   { "apy": 6.4, "exchangeRate": 1.0723 }
     },
     {
+      "key":    "sol-leveraged-stake",
+      "asset":  "SOL",
+      "title":  "Leveraged raSOL Max",
+      "blurb":  "Auto-managed leveraged raSOL. Amplified staking yield, no active management.",
+      "status": "live",
+      "live":   { "apy": 9.93, "exchangeRate": 1.1988 }
+    },
+    {
       "key":    "usdc-earn",
       "asset":  "USDC",
       "title":  "Earn",
@@ -58,7 +66,7 @@ curl https://hubra.app/api/v1/strategies
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `key` | `string` | Canonical strategy key (`sol-native-stake`, `sol-liquid-stake`, `usdc-earn`). Use this to address the strategy in other endpoints. |
+| `key` | `string` | Canonical strategy key (`sol-native-stake`, `sol-liquid-stake`, `sol-leveraged-stake`, `usdc-earn`). Use this to address the strategy in other endpoints. |
 | `asset` | `"SOL" \| "USDC"` | The input asset. |
 | `title` | `string` | Short human-friendly name. Same string the UI shows. |
 | `blurb` | `string` | One-line description. |
