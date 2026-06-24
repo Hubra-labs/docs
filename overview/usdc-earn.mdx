@@ -279,16 +279,20 @@ The vault snapshot returns the full state: `totalValue`, `apy.{oneDay,sevenDays,
 
 USDC Earn is **distinct from validator staking risk**. You are exposed to:
 
-- **Vault smart-contract risk.** Voltr's vault program. Audited (Sec3 X-RAY, FYEO) but no contract is risk-free.
+- **Vault smart-contract risk.** Voltr's vault program. Audited by FYEO and secured by Sec3's X-RAY static analysis tool, but no contract is risk-free.
 - **Adapter risk.** Each whitelisted adapter is its own contract surface.
 - **Underlying venue risk.** Kamino, Jupiter, etc. — each has its own audit and operational history.
 - **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
 
-| Component | Auditor | Status |
+| Component | Reviewed by | Status |
 | --- | --- | --- |
-| Vault program | Sec3 X-RAY | Passed |
-| Adapter programs | Sec3 X-RAY | Passed |
-| Vault program | FYEO | Passed |
+| Vault program | FYEO (audit) | Passed |
+| Vault program | Sec3 X-RAY (static analysis tool) | Passed |
+| Adapter programs | Sec3 X-RAY (static analysis tool) | Passed |
+
+<Tip>
+  Sec3 X-RAY scanner software is a security scanner specifically designed for Solana smart contracts. Sec3 X-RAY can detect many different types of security vulnerabilities and is integrated into our development process. Sec3 X-RAY has been adopted at leading Solana Protocols.
+</Tip>
 
 <Warning>
   Only deposit what you can afford to expose to Solana DeFi risk. No yield product is fully risk-free.
