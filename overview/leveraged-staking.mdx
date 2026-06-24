@@ -72,12 +72,16 @@ This is the part to read carefully.
 
 ### Vault layer - audited
 
-The vault is built on the **[Voltr](https://voltr.xyz) vault program** - the same program family used by Hubra's [USDC Earn](/overview/usdc-earn) product. Voltr's vault program has been audited by Sec3 X-RAY and FYEO.
+The vault is built on the **[Voltr](https://voltr.xyz) vault program** - the same program family used by Hubra's [USDC Earn](/overview/usdc-earn) product. Voltr's vault program has been audited by FYEO and secured by Sec3's X-RAY static analysis tool.
 
-| Component | Auditor | Status |
+| Component | Reviewed by | Status |
 | --- | --- | --- |
-| Voltr vault program | Sec3 X-RAY | Passed |
-| Voltr vault program | FYEO | Passed |
+| Voltr vault program | FYEO (audit) | Passed |
+| Voltr vault program | Sec3 X-RAY (static analysis tool) | Passed |
+
+<Tip>
+  Sec3 X-RAY scanner software is a security scanner specifically designed for Solana smart contracts. Sec3 X-RAY can detect many different types of security vulnerabilities and is integrated into our development process. Sec3 X-RAY has been adopted at leading Solana Protocols.
+</Tip>
 
 The vault owns the raSOL deposit, owns the raSOL Max mint, enforces the share-price math on deposit/withdraw, and only allows whitelisted adapters to act on the assets it holds.
 
@@ -174,7 +178,7 @@ Leverage adds two risk dimensions on top of plain [Liquid staking](/overview/liq
 - **Liquidation risk.** Save uses the SOL/USD Pyth feed for both reserves and treats raSOL 1:1 with SOL in its LTV math. Sudden divergence between raSOL's market price and its stake-pool fair value, or oracle movement, can push the position toward liquidation. The strategy targets a leverage well below Save's liquidation threshold and rebalances actively, but liquidation is not impossible.
 - **Swap-rate risk.** Every lever-up / lever-down / redemption Sanctum-swaps between SOL and raSOL. Slippage is capped at 0.15% per swap, but persistent dislocation between raSOL and SOL can compound across cycles.
 - **Adapter smart-contract risk.** The `rasol-max` adapter is not audited. The vault containment limits blast radius, but adapter bugs can still degrade strategy performance.
-- **Vault smart-contract risk.** Audited (Sec3 X-RAY, FYEO) - but no contract is risk-free.
+- **Vault smart-contract risk.** Audited by FYEO and secured by Sec3's X-RAY static analysis tool - but no contract is risk-free.
 - **Venue risk.** Save, MarginFi, and Sanctum each carry their own protocol risk independent of Hubra.
 - **Pause risk.** When the strategy is paused (admin response to a market or protocol event), deposits and withdrawals are temporarily disabled. The position itself continues to be managed.
 
@@ -201,7 +205,7 @@ Leverage adds two risk dimensions on top of plain [Liquid staking](/overview/liq
 
 <AccordionGroup>
   <Accordion title="Is raSOL Max audited?">
-    The Voltr vault program that holds your raSOL is audited (Sec3 X-RAY, FYEO). The Hubra `rasol-max` adapter that drives the leverage loop is **not yet audited**. Audit is on the roadmap.
+    The Voltr vault program that holds your raSOL is audited by FYEO and secured by Sec3's X-RAY static analysis tool. The Hubra `rasol-max` adapter that drives the leverage loop is **not yet audited**. Audit is on the roadmap.
   </Accordion>
 
   <Accordion title="Can the adapter drain the vault?">
