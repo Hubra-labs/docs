@@ -9,7 +9,7 @@ POST https://hubra.app/api/v1/stake
 
 Build a Solana transaction that stakes `amount` of the strategy's input asset. The returned `transaction` is **base64-encoded**:
 
-- **Unsigned** for `sol-liquid-stake` and `usdc-earn`.
+- **Unsigned** for `sol-liquid-stake`, `sol-leveraged-stake`, and `usdc-earn`.
 - **Partially signed** for `sol-native-stake` (the stake-account slot is pre-signed by the server; you only sign the wallet slot).
 
 The agent signs locally and broadcasts via [`POST /api/v1/broadcast`](/developer/endpoints/broadcast).
@@ -30,9 +30,9 @@ curl -X POST https://hubra.app/api/v1/stake \
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `strategy` | `"sol-native-stake" \| "sol-liquid-stake" \| "usdc-earn"` | yes | Which strategy to stake into. |
+| `strategy` | `"sol-native-stake" \| "sol-liquid-stake" \| "sol-leveraged-stake" \| "usdc-earn"` | yes | Which strategy to stake into. |
 | `wallet` | `string` | yes | Solana wallet pubkey (base58) that will sign the transaction. |
-| `amount` | `string` | yes | Amount to stake, decimal string. |
+| `amount` | `string` | yes | Amount to stake, decimal string. The input asset is the strategy's `asset` — **SOL** for the three `sol-*` keys (including `sol-leveraged-stake`), USDC for `usdc-earn`. |
 
 ---
 
@@ -94,6 +94,32 @@ Voltr-routed responses do not include `sanctum_order`. Broadcast via `route: "rp
 
 ---
 
+## Response — `sol-leveraged-stake` (raSOL Max)
+
+`amount` is **SOL**. The server builds a **single transaction** that does the whole conversion: create the raSOL ATA (idempotent) → SPL stake-pool `DepositSol` (SOL → raSOL) → Voltr `depositVault` (raSOL → raSOL Max LP). One signature, atomic.
+
+```json
+{
+  "strategy":             "sol-leveraged-stake",
+  "transaction":          "<base64 unsigned tx>",
+  "hubra_token":          "<token to pass to /broadcast>",
+  "route":                "rpc",
+  "depositedSolLamports": "20000000",
+  "stagedRasolLamports":  "16700000",
+  "receiptMint":          "CJEYakpjmKBvvUzAn3HJSs9vtijnv472T8YJEV3WzToF",
+  "receiptSymbol":        "raSOL Max",
+  "signers":              ["<your-wallet>"]
+}
+```
+
+Broadcast via `route: "rpc"` — no Sanctum or Voltr execute leg. After it confirms, read your raSOL Max LP balance on-chain; you pass that figure to [`POST /api/v1/unstake`](/developer/endpoints/unstake) to burn the position later.
+
+<Info>
+  The API deposits **SOL only** — the SOL → raSOL leg is built in for you. There is no "deposit raSOL directly" variant on the agent surface. The Voltr leg is sized from the exact raSOL the stake-pool mint produces (the same floor-rounded `lamports × supply / total_lamports` the pool applies on-chain), so the staged raSOL always matches what the deposit instruction expects.
+</Info>
+
+---
+
 ## The `hubra_token`
 
 Every `/stake` (and `/unstake`) response includes a `hubra_token` HMAC'd over the message bytes of the unsigned transaction. `POST /api/v1/broadcast` requires this token and rejects any transaction that was not built by Hubra. **Save it alongside the transaction and pass it back when broadcasting.**
@@ -116,6 +142,11 @@ curl -X POST https://hubra.app/api/v1/stake \
 curl -X POST https://hubra.app/api/v1/stake \
   -H 'Content-Type: application/json' \
   -d '{"strategy":"sol-liquid-stake","wallet":"<your-wallet>","amount":"1.0"}'
+
+# Leveraged: SOL → raSOL → raSOL Max in one tx
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{"strategy":"sol-leveraged-stake","wallet":"<your-wallet>","amount":"1.0"}'
 
 # USDC vault deposit
 curl -X POST https://hubra.app/api/v1/stake \

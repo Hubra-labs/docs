@@ -31,10 +31,10 @@ curl -X POST https://hubra.app/api/v1/quote \
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `strategy` | `"sol-liquid-stake" \| "sol-native-stake"` | yes | Which strategy to quote. |
+| `strategy` | `"sol-liquid-stake" \| "sol-native-stake" \| "sol-leveraged-stake"` | yes | Which strategy to quote. |
 | `wallet` | `string` | yes | Solana wallet pubkey (base58). |
-| `amount` | `string` | yes | Amount to unstake, decimal string. |
-| `stakeAccount` | `string` | conditional | Required for `sol-native-stake`: the active stake account being settled. Not used for `sol-liquid-stake`. |
+| `amount` | `string` | yes | Amount to unstake, decimal string. For `sol-leveraged-stake`, this is the **raSOL Max LP** to burn. |
+| `stakeAccount` | `string` | conditional | Required for `sol-native-stake`: the active stake account being settled. Not used for `sol-liquid-stake` or `sol-leveraged-stake`. |
 
 ---
 
@@ -79,11 +79,38 @@ Same shape as liquid; the input "asset" is SOL because the active stake account 
 
 ---
 
+## Response — `sol-leveraged-stake`
+
+Previews burning raSOL Max LP back to raSOL. `amount` is the LP to burn; `path` is the redemption route the unstake would take.
+
+```json
+{
+  "strategy":  "sol-leveraged-stake",
+  "inAsset":   "raSOL Max",
+  "outAsset":  "raSOL",
+  "inAmount":  "0.0195",
+  "outAmount": "0.019485797",
+  "path":      "flash-bracket",
+  "kind":      "instant"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `inAsset` | `string` | `raSOL Max` (the LP being burned). |
+| `outAsset` | `string` | `raSOL` (the payout asset — the leveraged exit stops at raSOL). |
+| `outAmount` | `string` | Estimated raSOL out at current NAV. |
+| `path` | `"vault-idle" \| "flash-bracket"` | Which redemption path the unstake would use. |
+
+There is no leveraged **deposit** quote: the SOL → raSOL mint is a deterministic floor-division from the live pool snapshot, so there's nothing to preview. To estimate the SOL you'd ultimately receive (rather than raSOL), feed `outAmount` into a `sol-liquid-stake` quote.
+
+---
+
 ## Errors
 
 | Status | Slug | When |
 | --- | --- | --- |
-| `400` | `invalid_request` | Missing `strategy` / `wallet` / `amount`, or `stakeAccount` missing for `sol-native-stake`. Also returned for `usdc-earn` (no quote support). |
+| `400` | `invalid_request` | Missing `strategy` / `wallet` / `amount`, or `stakeAccount` missing for `sol-native-stake`. Also returned for `usdc-earn` (a direct vault redemption with no slippage — nothing to quote). |
 | `404` | `not_found` | Unknown strategy key. |
 | `502` | `upstream_error` | Sanctum's quote router could not produce a number (no liquidity, wallet has no on-chain history, etc.). |
 | `503` | `service_unavailable` | Strategy is announced but not live. |

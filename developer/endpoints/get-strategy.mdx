@@ -84,7 +84,7 @@ The `onchain` field set is strategy-specific:
 - **`sol-leveraged-stake`:** `assetMint` (SOL), `depositMint` (raSOL — what the strategy ingests), `receiptMint` (raSOL Max LP), `receiptSymbol`.
 - **`usdc-earn`:** `assetMint`, `receiptMint`, `receiptSymbol`, `voltrVault`.
 
-For `sol-leveraged-stake`, both `actions.stake` and `actions.unstake` are `null` — the registry entry is live and the `live` block carries real numbers, but the programmatic deposit / burn builders aren't agent-callable yet. See [Strategies → `sol-leveraged-stake`](/developer/strategies#sol-leveraged-stake) for the routing guidance.
+For `sol-leveraged-stake`, `actions.stake.kinds` is `["deposit"]` and `actions.unstake.kinds` is `["instant"]` — both are agent-callable. Note `depositMint` (raSOL) is what the **vault** ingests; the `/api/v1/stake` endpoint itself deposits **SOL** and builds the SOL → raSOL leg for you. See [Strategies → `sol-leveraged-stake`](/developer/strategies#sol-leveraged-stake).
 
 ---
 

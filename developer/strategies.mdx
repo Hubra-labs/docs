@@ -13,12 +13,12 @@ The Hubra Agent API exposes four canonical strategies. Adding a new strategy is 
 | --- | --- | --- | --- |
 | `sol-native-stake` | SOL | Native delegation to Hubra's validator | live |
 | `sol-liquid-stake` | SOL | Mint raSOL via Sanctum | live |
-| `sol-leveraged-stake` | SOL | Auto-managed leveraged raSOL (raSOL Max) | live, listing only |
+| `sol-leveraged-stake` | SOL | Auto-managed leveraged raSOL (raSOL Max) | live |
 | `usdc-earn` | USDC | Voltr USDC vault | live |
 
 All four are returned by [`GET /api/v1/strategies`](/developer/endpoints/list-strategies). Each has a detailed view at [`GET /api/v1/strategies/{key}`](/developer/endpoints/get-strategy).
 
-`sol-leveraged-stake` is **listing-only**: the registry entry and live APY are real, but `actions.stake` / `actions.unstake` are `null` — the rasol-max deposit / burn builders aren't wired into `/api/v1/stake` or `/api/v1/unstake` yet. Route users to the human surface at `hubra.app/c/leverage` for deposits and burns until those endpoints land.
+All four are fully agent-callable: `actions.stake` and `actions.unstake` are populated for each, and `/api/v1/stake`, `/api/v1/unstake`, and `/api/v1/quote` build transactions for them.
 
 ---
 
@@ -73,15 +73,15 @@ Both pass through Sanctum and require the Sanctum-specific fields at broadcast t
 
 ## `sol-leveraged-stake`
 
-Hubra's auto-managed leveraged raSOL strategy (raSOL Max). Deposit raSOL, receive a raSOL Max LP receipt whose redemption rate drifts up each epoch as the leveraged position earns amplified staking yield. The strategy levers up when conditions are favorable and unwinds when borrow costs rise; you don't manage anything.
+Hubra's auto-managed leveraged raSOL strategy (raSOL Max). Deposit SOL, receive a raSOL Max LP receipt whose redemption rate drifts up each epoch as the leveraged position earns amplified staking yield. The strategy levers up when conditions are favorable and unwinds when borrow costs rise; you don't manage anything.
 
 | | |
 | --- | --- |
-| Asset in | raSOL (`HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`) |
-| Asset out | raSOL Max LP (`CJEYakpjmKBvvUzAn3HJSs9vtijnv472T8YJEV3WzToF`) |
-| Underlying SOL mint | `So11111111111111111111111111111111111111112` |
-| Stake actions | _unset_ — listing only |
-| Unstake actions | _unset_ — listing only |
+| Asset in (API) | SOL (`So11111111111111111111111111111111111111112`) |
+| Receipt | raSOL Max LP (`CJEYakpjmKBvvUzAn3HJSs9vtijnv472T8YJEV3WzToF`) |
+| Vault deposit mint | raSOL (`HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`) |
+| Stake actions | `deposit` |
+| Unstake actions | `instant` |
 
 ### Live data
 
@@ -92,11 +92,19 @@ Hubra's auto-managed leveraged raSOL strategy (raSOL Max). Deposit raSOL, receiv
 
 `GET /api/v1/apy/history?strategy=sol-leveraged-stake` returns the per-epoch bar-chart series (~12 points). Since the upstream is a single snapshot stream, the same series is returned under each range key.
 
-### Programmatic stake / unstake
+### Stake mechanics
 
-Not agent-callable yet. `actions.stake` and `actions.unstake` are both `null` in the registry response. Calls to `/api/v1/stake` or `/api/v1/unstake` with `strategy: "sol-leveraged-stake"` return `400 invalid_request` ("doesn't support staking"). Route users to `hubra.app/c/leverage` to deposit raSOL → raSOL Max or burn raSOL Max → raSOL through the human surface.
+`POST /api/v1/stake` takes `amount` in **SOL** and returns a single unsigned transaction that does the whole conversion: create the raSOL ATA (idempotent) → SPL stake-pool `DepositSol` (SOL → raSOL) → Voltr `depositVault` (raSOL → raSOL Max LP). One signature, atomic. Broadcast via `route: "rpc"`. The vault ingests raSOL internally, but the agent endpoint deposits SOL only — there is no "deposit raSOL directly" variant.
 
-To prepare a raSOL balance for the human-surface deposit, an agent can still use `sol-liquid-stake` (mint SOL → raSOL), then hand off.
+### Unstake mechanics
+
+`POST /api/v1/unstake` with `kind: "instant"` burns raSOL Max LP (`amount` = LP to burn) and pays out **raSOL**, via the rasol-max SDK's `vault-idle` (1 ix) or `flash-bracket` (8–10 ixs + ALT) path — the response `path` field tells you which. The first redemption per wallet lazily initialises a MarginFi account (~0.005 SOL one-shot rent). Broadcast via `route: "rpc"`.
+
+The leveraged exit stops at raSOL. To finish to SOL, pass `outputAsset: "SOL"` — the response keeps the same single LP → raSOL transaction and adds a `next` step that converts the resulting raSOL → SOL via a `sol-liquid-stake` instant unstake (a separate, non-atomic second tx). See [`POST /api/v1/unstake`](/developer/endpoints/unstake#finishing-to-sol-outputasset-sol).
+
+### Quote
+
+`POST /api/v1/quote` previews the raSOL payout for burning a given LP amount and the redemption `path`. There is no deposit-side quote — the SOL → raSOL mint is a deterministic floor-division from the live pool snapshot.
 
 ---
 
@@ -156,7 +164,7 @@ The strategy registry can flag a key as `coming_soon` (announced but not live). 
 
 This keeps the manifest stable: agents can plan around an upcoming strategy without it being a hard failure surface.
 
-There are no `coming_soon` strategies live in the registry today. `sol-leveraged-stake` is `live` but listing-only — the registry entry is real but the stake / unstake builders aren't wired through the agent endpoints yet (see the section above).
+There are no `coming_soon` strategies in the registry today — all four keys are `live` and fully agent-callable.
 
 ---
 
