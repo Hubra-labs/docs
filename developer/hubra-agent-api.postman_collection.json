@@ -1,0 +1,755 @@
+{
+  "info": {
+    "name": "Hubra Agent API",
+    "description": "Agent-callable HTTP surface for Hubra. Read endpoints are public; write endpoints return unsigned Solana transactions for the agent to sign locally with its own keypair, then submit via /broadcast.\n\nNo API key, no sign-up. The agent's keypair is the auth.\n\n**hubra_token gate:** /stake and /unstake responses include a `hubra_token` (HMAC over the unsigned tx's message bytes). /broadcast requires this token so the endpoint can't be used as a free Solana RPC for arbitrary txs. Tokens are valid ~2 minutes.\n\n**Sanctum-routed flows** (sol-liquid-stake, sol-native-stake instant) additionally need `sanctumKind` and `sanctum_order` forwarded from the build response to /broadcast — Sanctum's execute endpoint validates the signed tx against its original order. Native, leveraged, and usdc-earn flows broadcast over plain RPC (`route: \"rpc\"`).\n\n**Leveraged raSOL Max (sol-leveraged-stake) — LIVE.** Deposit takes `amount` in SOL and builds ONE tx: SOL → raSOL (SPL stake-pool DepositSol) → raSOL Max (Voltr depositVault). Unstake takes `amount` = raSOL Max LP to burn (`kind: \"instant\"`) and pays out raSOL via the rasol-max SDK's vault-idle or MarginFi flash-bracket path. To finish to SOL, chain a sol-liquid-stake instant unstake on the resulting raSOL.\n\nThis collection auto-captures `hubra_token`, `transaction`, `stakeAccount`, `sanctumKind`, and `sanctum_order` from successful stake/unstake responses into collection variables (`lastHubraToken`, `lastTransaction`, `lastStakeAccount`, `lastSanctumKind`, `lastSanctumOrder`) — broadcast requests reference them via `{{lastHubraToken}}` etc., so you can run a build then a broadcast back-to-back without manual paste-juggling.\n\nConfigure `baseUrl`, `wallet`, and `stakeAccount` in collection variables before running requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://hubra.app/api/v1",
+      "type": "string",
+      "description": "Root of the agent API. Production is https://hubra.app/api/v1. For local dev point it at http://localhost:3000/api/v1 (or :3001 if a dev server is already bound to :3000)."
+    },
+    {
+      "key": "wallet",
+      "value": "<your-wallet-pubkey>",
+      "type": "string",
+      "description": "Solana wallet pubkey (base58). Replace with the agent's actual wallet before running any flow."
+    },
+    {
+      "key": "stakeAccount",
+      "value": "<your-stake-account-pubkey>",
+      "type": "string",
+      "description": "Pubkey of an existing active stake account, used by /unstake and /quote for sol-native-stake. /stake (sol-native-stake) generates a fresh keypair internally and returns the pubkey - that flow doesn't read this variable."
+    },
+    {
+      "key": "lpAmount",
+      "value": "0.0195",
+      "type": "string",
+      "description": "raSOL Max LP to burn on a sol-leveraged-stake /unstake (decimal string, 9 decimals). Read your raSOL Max LP balance on-chain after a leveraged deposit and paste the exact amount here to burn the full position."
+    },
+    {
+      "key": "lastHubraToken",
+      "value": "",
+      "type": "string",
+      "description": "Auto-captured from the latest /stake or /unstake response. /broadcast references it via {{lastHubraToken}}."
+    },
+    {
+      "key": "lastTransaction",
+      "value": "",
+      "type": "string",
+      "description": "Auto-captured base64 unsigned (or partially-signed) tx from the latest /stake or /unstake. NOT directly broadcastable - sign locally first, then paste the signed bytes into /broadcast."
+    },
+    {
+      "key": "lastStakeAccount",
+      "value": "",
+      "type": "string",
+      "description": "Auto-captured stakeAccount pubkey from the latest sol-native-stake /stake response."
+    },
+    {
+      "key": "lastSanctumKind",
+      "value": "",
+      "type": "string",
+      "description": "Auto-captured sanctumKind from the latest Sanctum-routed /stake or /unstake response."
+    },
+    {
+      "key": "lastSanctumOrder",
+      "value": "",
+      "type": "string",
+      "description": "Auto-captured sanctum_order JSON (stringified) from the latest Sanctum-routed /stake or /unstake response. /broadcast Sanctum requests reference it via {{lastSanctumOrder}}."
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-capture token + tx + Sanctum fields from any 200 response so",
+          "// /broadcast and follow-up /unstake calls can reference them by collection variable.",
+          "if (!pm.response || pm.response.code !== 200) return;",
+          "let body;",
+          "try { body = pm.response.json(); } catch (e) { return; }",
+          "if (!body || typeof body !== 'object') return;",
+          "if (typeof body.hubra_token === 'string') pm.collectionVariables.set('lastHubraToken', body.hubra_token);",
+          "if (typeof body.transaction === 'string') pm.collectionVariables.set('lastTransaction', body.transaction);",
+          "if (typeof body.stakeAccount === 'string') pm.collectionVariables.set('lastStakeAccount', body.stakeAccount);",
+          "if (typeof body.sanctumKind === 'string') pm.collectionVariables.set('lastSanctumKind', body.sanctumKind);",
+          "if (body.sanctum_order && typeof body.sanctum_order === 'object') {",
+          "  pm.collectionVariables.set('lastSanctumOrder', JSON.stringify(body.sanctum_order));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Reads",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "List strategies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/strategies",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies"]
+            }
+          }
+        },
+        {
+          "name": "Strategy: sol-native-stake",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/strategies/sol-native-stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies", "sol-native-stake"]
+            }
+          }
+        },
+        {
+          "name": "Strategy: sol-liquid-stake",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/strategies/sol-liquid-stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies", "sol-liquid-stake"]
+            }
+          }
+        },
+        {
+          "name": "Strategy: sol-leveraged-stake (LIVE)",
+          "request": {
+            "method": "GET",
+            "description": "Leveraged raSOL Max. Now live for programmatic deposit (SOL input) + unstake (raSOL Max LP input). `actions.stake.kinds = [deposit]`, `actions.unstake.kinds = [instant]`.",
+            "url": {
+              "raw": "{{baseUrl}}/strategies/sol-leveraged-stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies", "sol-leveraged-stake"]
+            }
+          }
+        },
+        {
+          "name": "Strategy: usdc-earn",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/strategies/usdc-earn",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies", "usdc-earn"]
+            }
+          }
+        },
+        {
+          "name": "APY history: sol-native-stake (1M)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/apy/history?strategy=sol-native-stake&range=1M",
+              "host": ["{{baseUrl}}"],
+              "path": ["apy", "history"],
+              "query": [
+                { "key": "strategy", "value": "sol-native-stake" },
+                { "key": "range", "value": "1M" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "APY history: sol-liquid-stake (3M)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/apy/history?strategy=sol-liquid-stake&range=3M",
+              "host": ["{{baseUrl}}"],
+              "path": ["apy", "history"],
+              "query": [
+                { "key": "strategy", "value": "sol-liquid-stake" },
+                { "key": "range", "value": "3M" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "APY history: sol-leveraged-stake (6M)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/apy/history?strategy=sol-leveraged-stake&range=6M",
+              "host": ["{{baseUrl}}"],
+              "path": ["apy", "history"],
+              "query": [
+                { "key": "strategy", "value": "sol-leveraged-stake" },
+                { "key": "range", "value": "6M" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "APY history: usdc-earn (All)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/apy/history?strategy=usdc-earn&range=All",
+              "host": ["{{baseUrl}}"],
+              "path": ["apy", "history"],
+              "query": [
+                { "key": "strategy", "value": "usdc-earn" },
+                { "key": "range", "value": "All" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List tokens",
+          "request": {
+            "method": "GET",
+            "description": "Token metadata catalogue (mints, symbols, decimals, logos) for every asset the strategies touch. Each token is also addressable at /tokens/:slug.",
+            "url": {
+              "raw": "{{baseUrl}}/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["tokens"]
+            }
+          }
+        },
+        {
+          "name": "Token: rasol",
+          "request": {
+            "method": "GET",
+            "description": "Single token by slug. Try other slugs from the /tokens list (e.g. sol, usdc, rasol-max, rausdc).",
+            "url": {
+              "raw": "{{baseUrl}}/tokens/rasol",
+              "host": ["{{baseUrl}}"],
+              "path": ["tokens", "rasol"]
+            }
+          }
+        },
+        {
+          "name": "Push: VAPID public key",
+          "request": {
+            "method": "GET",
+            "description": "Returns the server's VAPID public key for Web Push subscription.",
+            "url": {
+              "raw": "{{baseUrl}}/push/key",
+              "host": ["{{baseUrl}}"],
+              "path": ["push", "key"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quote",
+      "item": [
+        {
+          "name": "Quote: sol-liquid-stake (raSOL → SOL)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quote",
+              "host": ["{{baseUrl}}"],
+              "path": ["quote"]
+            }
+          }
+        },
+        {
+          "name": "Quote: sol-native-stake instant (active stake → SOL)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\":     \"sol-native-stake\",\n  \"wallet\":       \"{{wallet}}\",\n  \"stakeAccount\": \"{{stakeAccount}}\",\n  \"amount\":       \"1.0\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quote",
+              "host": ["{{baseUrl}}"],
+              "path": ["quote"]
+            }
+          }
+        },
+        {
+          "name": "Quote: sol-leveraged-stake (raSOL Max LP → raSOL)",
+          "request": {
+            "method": "POST",
+            "description": "Previews a leveraged withdraw. `amount` = raSOL Max LP to burn. Returns expected raSOL payout (`outAmount`) and the redemption `path` (vault-idle | flash-bracket). Non-binding - NAV drifts between quote and unstake. There's no deposit-side quote: the SOL → raSOL mint is a deterministic floor-division from the pool snapshot. usdc-earn has no quote either - its withdraw is a direct vault redemption with no slippage.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-leveraged-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"{{lpAmount}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quote",
+              "host": ["{{baseUrl}}"],
+              "path": ["quote"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stake",
+      "item": [
+        {
+          "name": "Stake: sol-native-stake (delegate to Hubra validator)",
+          "request": {
+            "method": "POST",
+            "description": "Server generates the fresh stake-account keypair and pre-signs its slot. Agent only signs the wallet slot. The new stake-account pubkey is returned under `stakeAccount` - save it for future deactivate / withdraw / instant unstake. Broadcast over RPC.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-native-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["stake"]
+            }
+          }
+        },
+        {
+          "name": "Stake: sol-liquid-stake (mint raSOL via Sanctum)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["stake"]
+            }
+          }
+        },
+        {
+          "name": "Stake: sol-leveraged-stake (SOL → raSOL Max, LIVE)",
+          "request": {
+            "method": "POST",
+            "description": "Deposit SOL into Leveraged raSOL Max. `amount` is SOL. Builds ONE tx: create raSOL ATA (idempotent) → SPL stake-pool DepositSol (SOL → raSOL) → Voltr depositVault (raSOL → raSOL Max LP). Returns route=rpc + hubra_token. Sign as the wallet, broadcast via the RPC broadcast request. After it confirms, read your raSOL Max LP balance on-chain and set the `lpAmount` collection variable for the leveraged unstake.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-leveraged-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"0.02\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["stake"]
+            }
+          }
+        },
+        {
+          "name": "Stake: usdc-earn (deposit into Voltr vault)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"usdc-earn\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"5.0\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["stake"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unstake",
+      "item": [
+        {
+          "name": "Unstake: sol-native-stake deactivate (epoch-bounded ~2.5d)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\":     \"sol-native-stake\",\n  \"wallet\":       \"{{wallet}}\",\n  \"stakeAccount\": \"{{stakeAccount}}\",\n  \"kind\":         \"deactivate\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: sol-native-stake instant (Sanctum depositStake)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\":     \"sol-native-stake\",\n  \"wallet\":       \"{{wallet}}\",\n  \"stakeAccount\": \"{{stakeAccount}}\",\n  \"amount\":       \"1.0\",\n  \"kind\":         \"instant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: sol-liquid-stake instant (raSOL → SOL routed)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\",\n  \"kind\":     \"instant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: sol-liquid-stake slow (raSOL → stake account → epoch deactivate)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\",\n  \"kind\":     \"slow\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: sol-leveraged-stake instant (burn raSOL Max LP → raSOL)",
+          "request": {
+            "method": "POST",
+            "description": "Burns raSOL Max LP and pays out raSOL. `amount` = raSOL Max LP to burn (decimal, 9 decimals) - set the `lpAmount` variable to your on-chain LP balance after a leveraged deposit. Routes via the SDK's vault-idle (1 ix) or MarginFi flash-bracket (8-10 ixs + ALT) path; the response `path` field tells you which. First-ever redemption lazily inits the user's MarginFi account (~0.005 SOL one-shot rent). Returns route=rpc - broadcast over RPC. To finish to SOL, follow with a sol-liquid-stake instant unstake on the resulting raSOL.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-leveraged-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"{{lpAmount}}\",\n  \"kind\":     \"instant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: sol-leveraged-stake instant → SOL (chained)",
+          "request": {
+            "method": "POST",
+            "description": "Same single LP → raSOL withdraw tx, but `outputAsset: \"SOL\"` attaches a ready-to-run `next` step that converts the resulting raSOL → SOL via a sol-liquid-stake instant unstake. The SOL leg can't be built in the same call (Sanctum won't quote until the burned raSOL lands), so: broadcast THIS tx, read the raSOL your wallet actually received, then fire the `next` call with that exact amount. The `next.body.amount` returned here is the build-time estimate.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\":    \"sol-leveraged-stake\",\n  \"wallet\":      \"{{wallet}}\",\n  \"amount\":      \"{{lpAmount}}\",\n  \"kind\":        \"instant\",\n  \"outputAsset\": \"SOL\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: usdc-earn instant (partial)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"usdc-earn\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"5.0\",\n  \"kind\":     \"instant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Unstake: usdc-earn instant (withdraw all)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\":      \"usdc-earn\",\n  \"wallet\":        \"{{wallet}}\",\n  \"kind\":          \"instant\",\n  \"isWithdrawAll\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "Withdraw: native stake (after deactivation epoch)",
+          "request": {
+            "method": "POST",
+            "description": "Closes a native stake account once it's reached `inactive` state (deactivation epoch passed, ~2.5d after /unstake kind=deactivate). Pulls all lamports back to the wallet by default, or pass `lamports` (number) for a partial withdraw. Uses the stakeAccount pubkey returned by the original /stake call (auto-captured into lastStakeAccount).",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet\":       \"{{wallet}}\",\n  \"stakeAccount\": \"{{lastStakeAccount}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/withdraw",
+              "host": ["{{baseUrl}}"],
+              "path": ["withdraw"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Broadcast",
+      "item": [
+        {
+          "name": "Broadcast via Solana RPC (default)",
+          "request": {
+            "method": "POST",
+            "description": "Plain Solana RPC. Use for native, sol-leveraged-stake, and usdc-earn flows (route=rpc). Replace signed_tx with the base64 of your locally-signed transaction. hubra_token is auto-pulled from the most recent /stake or /unstake response - if you haven't run one yet, paste the value manually.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signed_tx\":   \"REPLACE_WITH_BASE64_SIGNED_TX\",\n  \"hubra_token\": \"{{lastHubraToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["broadcast"]
+            }
+          }
+        },
+        {
+          "name": "Broadcast via Sanctum (MEV-protected, swap flows)",
+          "request": {
+            "method": "POST",
+            "description": "Use for txs returned with route=sanctum from /stake or /unstake (sol-liquid-stake, sol-native-stake instant). Adds MEV protection + smarter retries. All four Sanctum-specific fields are auto-injected from collection variables: hubra_token, sanctumKind (token | depositStake | depositSol | withdrawStake), and sanctum_order (the original Sanctum order response that Sanctum's execute endpoint validates against). Replace signed_tx with your locally-signed bytes.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signed_tx\":     \"REPLACE_WITH_BASE64_SIGNED_TX\",\n  \"hubra_token\":   \"{{lastHubraToken}}\",\n  \"route\":         \"sanctum\",\n  \"sanctumKind\":   \"{{lastSanctumKind}}\",\n  \"sanctum_order\": {{lastSanctumOrder}}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["broadcast"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Track wallet",
+          "request": {
+            "method": "POST",
+            "description": "Register a wallet for balance-snapshot + points tracking. `walletName` is the optional Wallet Standard adapter name (e.g. \"Phantom\").",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet\":     \"{{wallet}}\",\n  \"walletName\": \"Phantom\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/wallet/track",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "track"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Push",
+      "item": [
+        {
+          "name": "Subscribe (Web Push, SIWS-gated)",
+          "request": {
+            "method": "POST",
+            "description": "Register a Web Push subscription. Requires a SIWS proof (sign-in-with-Solana message + base58 ed25519 signature) binding the subscription to `userId` (the wallet). Replace the subscription + proof placeholders with real values from the browser PushManager + wallet adapter.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{wallet}}\",\n  \"subscription\": {\n    \"endpoint\": \"https://fcm.googleapis.com/fcm/send/REPLACE\",\n    \"keys\": {\n      \"p256dh\": \"REPLACE_P256DH\",\n      \"auth\":   \"REPLACE_AUTH\"\n    }\n  },\n  \"proof\": {\n    \"message\":   \"REPLACE_WITH_SIWS_MESSAGE\",\n    \"signature\": \"REPLACE_WITH_BASE58_SIGNATURE\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/push/subscribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["push", "subscribe"]
+            }
+          }
+        },
+        {
+          "name": "Unsubscribe",
+          "request": {
+            "method": "POST",
+            "description": "Remove a Web Push subscription by its endpoint.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/REPLACE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/push/unsubscribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["push", "unsubscribe"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "item": [
+        {
+          "name": "404: unknown strategy",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/strategies/bogus",
+              "host": ["{{baseUrl}}"],
+              "path": ["strategies", "bogus"]
+            }
+          }
+        },
+        {
+          "name": "400: missing required fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stake",
+              "host": ["{{baseUrl}}"],
+              "path": ["stake"]
+            }
+          }
+        },
+        {
+          "name": "400: invalid kind for strategy",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-liquid-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"amount\":   \"1.0\",\n  \"kind\":     \"deactivate\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "400: leveraged unstake missing amount",
+          "request": {
+            "method": "POST",
+            "description": "sol-leveraged-stake unstake requires `amount` (raSOL Max LP to burn). Omitting it returns 400.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"sol-leveraged-stake\",\n  \"wallet\":   \"{{wallet}}\",\n  \"kind\":     \"instant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/unstake",
+              "host": ["{{baseUrl}}"],
+              "path": ["unstake"]
+            }
+          }
+        },
+        {
+          "name": "400: invalid range",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/apy/history?strategy=usdc-earn&range=BAD",
+              "host": ["{{baseUrl}}"],
+              "path": ["apy", "history"],
+              "query": [
+                { "key": "strategy", "value": "usdc-earn" },
+                { "key": "range", "value": "BAD" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "403: invalid hubra_token on /broadcast",
+          "request": {
+            "method": "POST",
+            "description": "/broadcast rejects any signed_tx + hubra_token combo where the token doesn't match the tx's message hash, is malformed, or expired. Get a fresh token from /stake or /unstake.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signed_tx\":   \"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\n  \"hubra_token\": \"99999.deadbeef\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["broadcast"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
