@@ -33,6 +33,41 @@ curl -X POST https://hubra.app/api/v1/stake \
 | `strategy` | `"sol-native-stake" \| "sol-liquid-stake" \| "sol-leveraged-stake" \| "usdc-earn"` | yes | Which strategy to stake into. |
 | `wallet` | `string` | yes | Solana wallet pubkey (base58) that will sign the transaction. |
 | `amount` | `string` | yes | Amount to stake, decimal string. The input asset is the strategy's `asset` — **SOL** for the three `sol-*` keys (including `sol-leveraged-stake`), USDC for `usdc-earn`. |
+| `partner_api_key` | `string` | no | Your partner API key from [partner.hubra.app](https://partner.hubra.app). Credits the wallet you bring in to your partner account. Can also be sent as the `X-Partner-Key` header instead of in the body. See [Partner attribution](#partner-attribution). |
+
+---
+
+## Partner attribution
+
+If you're a Hubra **partner** (protocol, dev, or creator), pass your partner API key on each stake call and the wallet you bring in is attributed to you — the resulting liquidity shows up on your [partner dashboard](https://partner.hubra.app).
+
+Get your key from [partner.hubra.app](https://partner.hubra.app) → **Dashboard → API key**. Send it either as a body field or a header:
+
+```bash
+# As a body field
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "strategy":        "sol-liquid-stake",
+    "wallet":          "<end-user-wallet>",
+    "amount":          "1.5",
+    "partner_api_key": "hbr_pk_<your-key>"
+  }'
+
+# …or as a header (keeps the key out of the JSON body)
+curl -X POST https://hubra.app/api/v1/stake \
+  -H 'Content-Type: application/json' \
+  -H 'X-Partner-Key: hbr_pk_<your-key>' \
+  -d '{"strategy":"sol-liquid-stake","wallet":"<end-user-wallet>","amount":"1.5"}'
+```
+
+<Info>
+  Attribution is **first-write-wins** per wallet: the first partner to bring a wallet in keeps the credit. Passing the key is optional — omit it and the stake behaves exactly as before. If you pass a key that is unknown or belongs to an inactive partner, the call returns `403 forbidden` so you notice rather than silently losing attribution.
+</Info>
+
+<Warning>
+  Treat the partner API key like a secret — it identifies your partner account. Prefer the `X-Partner-Key` header in server-side integrations, and rotate the key from your dashboard if it leaks.
+</Warning>
 
 ---
 
@@ -161,6 +196,7 @@ curl -X POST https://hubra.app/api/v1/stake \
 | Status | Slug | When |
 | --- | --- | --- |
 | `400` | `invalid_request` | Missing or malformed fields. |
+| `403` | `forbidden` | `partner_api_key` (or `X-Partner-Key`) was supplied but is unknown or belongs to an inactive partner. |
 | `404` | `not_found` | Unknown strategy key. |
 | `502` | `upstream_error` | Sanctum / Voltr could not build the transaction (wallet does not exist on-chain, no associated token account, insufficient liquidity for size). |
 | `503` | `service_unavailable` | Strategy is announced but not live. |

@@ -145,6 +145,20 @@ For now, the header is unused.
 
 ---
 
+## Partner attribution
+
+Hubra **partners** (protocols, devs, creators) can identify themselves on stake calls so the liquidity they bring in is credited to their account. This is **not** authentication — it's attribution, and it's entirely optional.
+
+Pass your partner API key (from [partner.hubra.app](https://partner.hubra.app)) on [`POST /api/v1/stake`](/developer/endpoints/stake#partner-attribution), either as a `partner_api_key` body field or an `X-Partner-Key` header:
+
+```http
+X-Partner-Key: hbr_pk_<your-key>
+```
+
+The first partner to bring a given wallet in keeps the credit (first-write-wins). An invalid or inactive key returns `403 forbidden`.
+
+---
+
 ## What's next
 
 <CardGroup cols={2}>
