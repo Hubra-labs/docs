@@ -145,17 +145,17 @@ For now, the header is unused.
 
 ---
 
-## Partner attribution
+## Referral attribution
 
-Hubra **partners** (protocols, devs, creators) can identify themselves on stake calls so the liquidity they bring in is credited to their account. This is **not** authentication — it's attribution, and it's entirely optional.
+A referral code on a stake call credits the staking wallet to the code's owner. This is **not** authentication — it's attribution, and it's entirely optional. Hubra **partners** (protocols, devs, creators) get a code from [partner.hubra.app](https://partner.hubra.app) that resolves to their payout wallet, but any referrer's code works — a partner is just a referrer.
 
-Pass your partner API key (from [partner.hubra.app](https://partner.hubra.app)) on [`POST /api/v1/stake`](/developer/endpoints/stake#partner-attribution), either as a `partner_api_key` body field or an `X-Partner-Key` header:
+Pass it on [`POST /api/v1/stake`](/developer/endpoints/stake#referral-attribution), either as a `referral_code` body field or an `X-Referral-Code` header:
 
 ```http
-X-Partner-Key: hbr_pk_<your-key>
+X-Referral-Code: HUBAB23
 ```
 
-The first partner to bring a given wallet in keeps the credit (first-write-wins). An invalid or inactive key returns `403 forbidden`.
+The first referrer to bring a given wallet in keeps the credit (first-write-wins), and a wallet is never credited to itself. A malformed code returns `400 invalid_request`; one that doesn't resolve returns `404 not_found`.
 
 ---
 
