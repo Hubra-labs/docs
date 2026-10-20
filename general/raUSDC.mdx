@@ -44,7 +44,9 @@ The Hubra app does this math for you and displays your USDC value directly. You 
 
 ## Where the yield comes from
 
-The Voltr vault routes USDC across audited Solana lending venues (Kamino, Jupiter, and the whitelisted set). Yield from those venues flows into the raUSDC redemption rate.
+The Voltr vault routes USDC across vetted Solana venues: Kamino vaults, Jupiter Lend, Project 0 (USDC lending), and Perena USD\* (stablecoin basket). Yield from those venues flows into the raUSDC redemption rate.
+
+When the vault allocates to Perena, it holds USD\* exposure rather than plain USDC. Project 0 and Perena connect through Hubra's own adapter, which has not yet been independently audited.
 
 There is no Hubra fee on the position. The displayed APY is the venue-blended yield net of any underlying market spreads.
 
@@ -74,8 +76,8 @@ If you connect an external wallet (Phantom, Backpack, Solflare) and deposit into
 ## Risks
 
 - **Vault smart-contract risk.** Voltr's vault contracts have been audited but no contract is risk-free.
-- **Adapter risk.** Each integration (Kamino, Jupiter, etc.) carries its own contract surface.
-- **Underlying venue risk.** A failure of an integrated lending market could affect the position.
-- **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
+- **Adapter risk.** Each integration (Kamino, Jupiter, Project 0, Perena) carries its own contract surface. The Project 0 and Perena adapter is built by Hubra and not yet audited.
+- **Underlying venue risk.** A failure of an integrated venue could affect the position.
+- **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that. Perena allocations hold USD\* exposure rather than plain USDC.
 
 See [USDC Earn](/overview/usdc-earn) for the full risk discussion.

@@ -73,10 +73,10 @@ Splitting an existing stake account on-chain before routing the slice you specif
 Hubra Earn vault receipt mint (`53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS`). Non-rebasing; appreciates against USDC.
 
 ### Voltr vault
-`3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ`. The vault routes USDC across Kamino + Jupiter for blended yield. Withdrawals are instant.
+`3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ`. The vault routes USDC to Kamino vaults, Jupiter Lend, Project 0, or Perena USD\*. Withdrawals are instant.
 
 ### Adapter
-A whitelisted contract integration that the Voltr vault is allowed to deposit into. Each adapter is independently audited.
+A whitelisted contract integration that the Voltr vault is allowed to deposit into. Kamino and Jupiter use Voltr's adapters. Project 0 and Perena use Hubra's own adapter, which is not yet audited.
 
 ---
 
