@@ -18,7 +18,7 @@ This guide gets you from a Solana wallet to a working stake position. No enginee
     Type the amount of SOL or USDC you want to stake. The app shows the live exchange rate, expected output, and any fees up front. There is no minimum.
   </Step>
   <Step title="Sign the transaction">
-    Approve the transaction in your wallet. Hubra covers network fees, so you do not need a SOL balance set aside for gas.
+    Approve the transaction in your wallet. Network fees are paid from your wallet, so keep a small SOL balance for them.
   </Step>
   <Step title="Watch your position">
     Your position shows up immediately on the **Positions** tab. For native stake, the position activates over the next epoch (about 2 to 3 days). For raSOL, the redemption rate begins climbing each epoch from the moment of mint. For USDC Earn, yield accrues continuously.
@@ -35,7 +35,7 @@ Three paths, depending on the strategy:
 - **Native, instant:** Routed through Sanctum's `depositStake`. Active stake settles to SOL in one transaction. Pays a price-impact fee to the LST liquidity pool.
 - **Liquid, instant:** Swap raSOL → SOL through Sanctum's pooled LST liquidity. One transaction, pays price impact only.
 - **Liquid, slow:** `withdrawStake` to a native stake account, then standard epoch deactivation.
-- **USDC, instant:** Voltr direct withdraw. No cooldown, no fee.
+- **USDC, instant:** Voltr direct withdraw. No cooldown, no fee. Depends on liquidity in the underlying venues.
 
 The full mechanics live in [Instant unstake](/overview/instant-unstake).
 

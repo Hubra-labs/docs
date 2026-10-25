@@ -1,9 +1,9 @@
 ---
 title: "USDC Earn"
-description: "Stablecoin yield from the Hubra validator operator. Voltr-routed, audited venues, instant withdraws."
+description: "Stablecoin yield from the Hubra validator operator. Voltr-routed to whitelisted venues, no withdraw cooldown."
 ---
 
-USDC Earn is Hubra's stablecoin route. You deposit USDC; the vault routes it across audited Solana lending venues for blended yield. You can withdraw any amount at any time, no cooldown, no fee.
+USDC Earn is Hubra's stablecoin route. You deposit USDC; the vault allocates it only to whitelisted venues (currently Kamino vaults and Jupiter Lend) for blended yield. Withdrawals have no cooldown and no fee, but they depend on liquidity being available in those venues.
 
 This page is the **feature reference**: how the vault is wired, what the on-chain accounts look like, and what the deposit / withdraw transactions actually do.
 
@@ -36,13 +36,13 @@ This page is the **feature reference**: how the vault is wired, what the on-chai
                                    │
                   Whitelisted adapters route to
                                    │
-                ┌──────────────────┼──────────────────┐
-                ▼                  ▼                  ▼
-            Kamino             Jupiter            (other)
-           lending             lending           whitelisted
+                ┌──────────────────┴──────────────────┐
+                ▼                                     ▼
+             Kamino                                Jupiter
+             vaults                                 Lend
 ```
 
-Hubra never holds USDC. The vault is a Solana program account governed by audited contracts; deposits and withdraws happen by the user's wallet calling the vault program directly.
+Hubra never holds USDC. The vault is a Solana program account governed by the Voltr vault program; deposits and withdraws happen by the user's wallet calling the vault program directly.
 
 ---
 
@@ -166,6 +166,10 @@ USDC Earn supports **direct withdraw** only. Other Voltr vaults can have queued 
 2. Transfers USDC from the vault to your associated USDC token account.
 3. Settles in a single transaction. No cooldown.
 
+<Note>
+  A direct withdraw can only pay out USDC the vault can pull back from its venues at that moment. If a venue's liquidity is tight, a withdraw may need to wait or be split into smaller amounts.
+</Note>
+
 ### `isWithdrawAll` semantics
 
 Two withdraw modes:
@@ -207,12 +211,12 @@ Both return `route: "voltr"`. Broadcast via `route: "rpc"`.
 
 ## Whitelisted adapters
 
-The Voltr vault program is configured with a whitelist of **adapters**: the only contracts the vault is allowed to deposit USDC into. Each adapter is independently audited.
+The Voltr vault program is configured with a whitelist of **adapters**: the only contracts the vault is allowed to deposit USDC into.
 
-The current adapter set includes lending markets on:
+The rebalancer's current strategy list covers:
 
-- **Kamino** — automated lending
-- **Jupiter** — lend infrastructure
+- **Kamino** vaults
+- **Jupiter Lend**
 
 The full integration list is on-chain and exposed via Voltr's vault snapshot endpoint:
 
@@ -279,20 +283,11 @@ The vault snapshot returns the full state: `totalValue`, `apy.{oneDay,sevenDays,
 
 USDC Earn is **distinct from validator staking risk**. You are exposed to:
 
-- **Vault smart-contract risk.** Voltr's vault program. Audited by FYEO and secured by Sec3's X-RAY static analysis tool, but no contract is risk-free.
+- **Vault smart-contract risk.** Your USDC sits in Voltr's vault program, and no contract is risk-free.
 - **Adapter risk.** Each whitelisted adapter is its own contract surface.
-- **Underlying venue risk.** Kamino, Jupiter, etc. — each has its own audit and operational history.
+- **Underlying venue risk.** Kamino vaults and Jupiter Lend each carry their own protocol and operational risk.
+- **Liquidity risk.** Withdrawals depend on the venues having enough available USDC at that moment.
 - **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
-
-| Component | Reviewed by | Status |
-| --- | --- | --- |
-| Vault program | FYEO (audit) | Passed |
-| Vault program | Sec3 X-RAY (static analysis tool) | Passed |
-| Adapter programs | Sec3 X-RAY (static analysis tool) | Passed |
-
-<Tip>
-  Sec3 X-RAY scanner software is a security scanner specifically designed for Solana smart contracts. Sec3 X-RAY can detect many different types of security vulnerabilities and is integrated into our development process. Sec3 X-RAY has been adopted at leading Solana Protocols.
-</Tip>
 
 <Warning>
   Only deposit what you can afford to expose to Solana DeFi risk. No yield product is fully risk-free.
@@ -304,7 +299,7 @@ USDC Earn is **distinct from validator staking risk**. You are exposed to:
 
 <AccordionGroup>
   <Accordion title="Why is the response transaction sometimes large?">
-    The transaction may include an associated token account (ATA) creation for raUSDC if your wallet has not held it before. ATA creation costs ~0.002 SOL of rent (covered by Hubra in the app, paid by the wallet for direct API callers).
+    The transaction may include an associated token account (ATA) creation for raUSDC if your wallet has not held it before. ATA creation costs ~0.002 SOL of rent, paid from your wallet in the app and through the API.
   </Accordion>
 
   <Accordion title="Can I deposit USDT, USDS, or other stablecoins?">
@@ -312,7 +307,7 @@ USDC Earn is **distinct from validator staking risk**. You are exposed to:
   </Accordion>
 
   <Accordion title="What is the difference between `direct-withdraw` and a queued withdraw?">
-    Voltr's vault program supports both. The Hubra Earn vault is configured for direct (instant) withdraws — `withdrawalWaitingPeriod` is 0. A queued withdraw would require waiting `withdrawalWaitingPeriod` seconds before the funds settle. Not used here.
+    Voltr's vault program supports both. The Hubra Earn vault is configured for direct withdraws (`withdrawalWaitingPeriod` is 0), subject to venue liquidity. A queued withdraw would require waiting `withdrawalWaitingPeriod` seconds before the funds settle. Not used here.
   </Accordion>
 
   <Accordion title="How does yield show up?">

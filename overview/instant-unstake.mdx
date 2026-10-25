@@ -23,7 +23,7 @@ This page covers what's actually happening on-chain, which Sanctum endpoint each
 | Native stake account (slice) | SOL | Split + route | `StakeProgram.split` then `swap/depositStake` |
 | raUSDC | USDC | Vault direct-withdraw | Voltr `direct-withdraw` (no Sanctum) |
 
-The first three are the Sanctum-routed flows. The last one is included because USDC withdraws are also "instant"; they just don't pass through Sanctum.
+The first three are the Sanctum-routed flows. The last one is included because USDC withdraws are also "instant"; they just don't pass through Sanctum, and they depend on liquidity in the vault's venues.
 
 ---
 
@@ -125,7 +125,7 @@ The split account is what gets routed through `depositStake`. The remaining stak
 | Rent for the new (split) account | ~0.002 SOL |
 | Sanctum price impact on the slice | varies |
 | Hubra protocol fee | None |
-| Network fees | Covered by Hubra |
+| Network fees | Paid from your wallet |
 
 In the app, the split + route happens inside a single transaction-card flow; you see one quote and one signature.
 
@@ -243,11 +243,11 @@ For raSOL specifically, pooled liquidity is deep enough that price impact stays 
 
 | Path | Hubra fee | Sanctum fee | Network fee | Other |
 | --- | --- | --- | --- | --- |
-| Native instant | None | Price impact (dynamic) | Covered by Hubra | — |
-| raSOL instant | None | Price impact (dynamic) | Covered by Hubra | — |
-| raSOL slow | None | None | Covered by Hubra | Epoch wait (~2 to 3d) |
-| Partial native instant | None | Price impact on the slice | Covered by Hubra | ~0.002 SOL rent for the split account (covered) |
-| USDC instant | None | None | Covered by Hubra | — |
+| Native instant | None | Price impact (dynamic) | Paid from your wallet | None |
+| raSOL instant | None | Price impact (dynamic) | Paid from your wallet | None |
+| raSOL slow | None | None | Paid from your wallet | Epoch wait (~2 to 3d) |
+| Partial native instant | None | Price impact on the slice | Paid from your wallet | ~0.002 SOL rent for the split account, paid from your wallet |
+| USDC instant | None | None | Paid from your wallet | Depends on venue liquidity |
 
 Price impact comes from the depth of Sanctum's pool at the moment the swap runs. Hubra adds nothing on top. The number you see in the quote is what you pay.
 
