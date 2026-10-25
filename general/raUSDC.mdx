@@ -44,7 +44,7 @@ The Hubra app does this math for you and displays your USDC value directly. You 
 
 ## Where the yield comes from
 
-The Voltr vault routes USDC across audited Solana lending venues (Kamino, Jupiter, and the whitelisted set). Yield from those venues flows into the raUSDC redemption rate.
+The Voltr vault allocates USDC only to whitelisted venues, which are currently Kamino vaults and Jupiter Lend. Yield from those venues flows into the raUSDC redemption rate.
 
 There is no Hubra fee on the position. The displayed APY is the venue-blended yield net of any underlying market spreads.
 
@@ -73,8 +73,8 @@ If you connect an external wallet (Phantom, Backpack, Solflare) and deposit into
 
 ## Risks
 
-- **Vault smart-contract risk.** Voltr's vault contracts have been audited but no contract is risk-free.
-- **Adapter risk.** Each integration (Kamino, Jupiter, etc.) carries its own contract surface.
+- **Vault smart-contract risk.** Your USDC sits in Voltr's vault program, and no contract is risk-free.
+- **Adapter risk.** Each integration (Kamino vaults, Jupiter Lend) carries its own contract surface.
 - **Underlying venue risk.** A failure of an integrated lending market could affect the position.
 - **Stablecoin risk.** USDC is a Circle-issued stablecoin and carries the issuer risk associated with that.
 

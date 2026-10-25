@@ -63,7 +63,7 @@ Swap raSOL → SOL via routed liquidity (Sanctum's swap router). Pays a small pr
 Sanctum's `depositStake` consumes an active stake account and returns SOL immediately. Pays a price-impact fee.
 
 ### Partial unstake
-Splitting an existing stake account on-chain before routing the slice you specified. Costs ~0.002 SOL of rent (covered by Hubra) for the new account.
+Splitting an existing stake account on-chain before routing the slice you specified. Costs ~0.002 SOL of rent for the new account, paid from your wallet.
 
 ---
 
@@ -73,10 +73,10 @@ Splitting an existing stake account on-chain before routing the slice you specif
 Hubra Earn vault receipt mint (`53fZaJGDMHcfku8pzZak5obVFUUjVxwqRTF63M3SQiSS`). Non-rebasing; appreciates against USDC.
 
 ### Voltr vault
-`3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ`. The vault routes USDC across Kamino + Jupiter for blended yield. Withdrawals are instant.
+`3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ`. The vault routes USDC across Kamino vaults and Jupiter Lend for blended yield. Withdrawals have no cooldown and depend on venue liquidity.
 
 ### Adapter
-A whitelisted contract integration that the Voltr vault is allowed to deposit into. Each adapter is independently audited.
+A whitelisted contract integration that the Voltr vault is allowed to deposit into.
 
 ---
 
