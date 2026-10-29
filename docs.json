@@ -164,5 +164,11 @@
       "github": "https://github.com/block-sync-one/hubra",
       "telegram": "https://tg.hubra.app"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/overview/auto-earn",
+      "destination": "/overview/usdc-earn"
+    }
+  ]
 }
