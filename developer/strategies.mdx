@@ -40,7 +40,7 @@ Direct delegation to Hubra's Solana validator. The agent's wallet creates a stak
 
 ### Unstake mechanics
 
-- `kind: "deactivate"` triggers `StakeProgram.deactivate`. After the deactivation epoch (~2 to 3 days), call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the stake account and pull SOL back.
+- `kind: "deactivate"` triggers `StakeProgram.deactivate`. After the next epoch boundary (up to about a day, one epoch, roughly 25.5 hours), call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the stake account and pull SOL back.
 - `kind: "instant"` routes the active stake account through Sanctum's `depositStake` for immediate SOL.
 
 Both kinds require the `stakeAccount` pubkey returned by the original `/stake` call.

@@ -40,7 +40,7 @@ Yield is delivered through the rate, not the balance. This is the same model Aav
 
 ## Where the yield comes from
 
-Every raSOL is backed by SOL staked to the **Hubra validator**. The validator earns Solana's standard staking rewards at every epoch boundary (~2 to 3 days). Rewards flow into the raSOL exchange rate.
+Every raSOL is backed by SOL staked to the **Hubra validator**. The validator earns Solana's standard staking rewards at every epoch boundary (once per epoch, currently about a day). Rewards flow into the raSOL exchange rate.
 
 There is no second yield layer. raSOL's APY is exactly the underlying validator's net APY (issuance × (1 − commission)).
 
@@ -68,7 +68,7 @@ Three ways to redeem raSOL for SOL:
 | --- | --- | --- | --- |
 | Sell on a DEX | Instant | DEX fee \+ price impact | Standard token swap |
 | Sanctum instant unstake | One block | Sanctum price impact only | Pooled LST liquidity swap |
-| Sanctum slow unstake (`withdrawStake`) | ~2 to 3 days | None | raSOL → native stake account → epoch deactivation |
+| Sanctum slow unstake (`withdrawStake`) | Up to ~1 day (next epoch boundary) | None | raSOL → native stake account → epoch deactivation |
 
 The instant and slow paths run inside the Hubra app; sell-on-DEX you can do anywhere SPL tokens trade.
 

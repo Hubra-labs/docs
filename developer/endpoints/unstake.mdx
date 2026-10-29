@@ -11,7 +11,7 @@ Build an unsigned unstake transaction. The route depends on `strategy` and `kind
 
 | Strategy | `deactivate` | `instant` | `slow` |
 | --- | --- | --- | --- |
-| `sol-native-stake` | `StakeProgram.deactivate` (epoch-bounded ~2.5d) | Sanctum `depositStake` (active stake → SOL immediately) | — |
+| `sol-native-stake` | `StakeProgram.deactivate` (ends at next epoch boundary, up to ~1 day) | Sanctum `depositStake` (active stake → SOL immediately) | — |
 | `sol-liquid-stake` | — | Sanctum swap raSOL → SOL via routed liquidity | Sanctum `withdrawStake` (raSOL → native stake account, then standard epoch deactivation) |
 | `sol-leveraged-stake` | — | Burn raSOL Max LP → raSOL via the rasol-max SDK (vault-idle or MarginFi flash bracket) | — |
 | `usdc-earn` | — | Voltr direct-withdraw (no cooldown, no fee) | — |
