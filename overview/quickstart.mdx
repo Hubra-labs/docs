@@ -21,7 +21,7 @@ This guide gets you from a Solana wallet to a working stake position. No enginee
     Approve the transaction in your wallet. Hubra covers network fees, so you do not need a SOL balance set aside for gas.
   </Step>
   <Step title="Watch your position">
-    Your position shows up immediately on the **Positions** tab. For native stake, the position activates over the next epoch (about 2 to 3 days). For raSOL, the redemption rate begins climbing each epoch from the moment of mint. For USDC Earn, yield accrues continuously.
+    Your position shows up immediately on the **Positions** tab. For native stake, the position activates at the next epoch boundary (up to about a day, one epoch, roughly 25.5 hours). For raSOL, the redemption rate begins climbing each epoch from the moment of mint. For USDC Earn, yield accrues continuously.
   </Step>
 </Steps>
 
@@ -31,7 +31,7 @@ This guide gets you from a Solana wallet to a working stake position. No enginee
 
 Three paths, depending on the strategy:
 
-- **Native, slow:** Standard `StakeProgram.deactivate`. Account becomes withdrawable after the deactivation epoch (about 2 to 3 days). No fee.
+- **Native, slow:** Standard `StakeProgram.deactivate`. Account becomes withdrawable at the next epoch boundary (up to about a day, one epoch, roughly 25.5 hours). No fee.
 - **Native, instant:** Routed through Sanctum's `depositStake`. Active stake settles to SOL in one transaction. Pays a price-impact fee to the LST liquidity pool.
 - **Liquid, instant:** Swap raSOL → SOL through Sanctum's pooled LST liquidity. One transaction, pays price impact only.
 - **Liquid, slow:** `withdrawStake` to a native stake account, then standard epoch deactivation.

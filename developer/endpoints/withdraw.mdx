@@ -18,7 +18,7 @@ By default, withdraws all lamports back to the wallet (closing the account). Pas
 ```
 1. POST /api/v1/stake           sol-native-stake → activating  (epoch N)
 2. POST /api/v1/unstake         kind=deactivate  → deactivating (epoch N+1...)
-3. wait for deactivation epoch  → inactive       (~2 to 3 days later)
+3. wait for deactivation epoch  → inactive       (next epoch boundary, up to ~1 day later)
 4. POST /api/v1/withdraw        → close + refund SOL to wallet
 ```
 

@@ -3,7 +3,7 @@ title: "Instant unstake"
 description: "Exit a SOL position in a single transaction. Native or liquid, full or partial. Sanctum-routed."
 ---
 
-Solana's stake program enforces a 2 to 3 day deactivation period. Hubra's instant unstake routes around it through Sanctum's shared LST liquidity layer, so you can exit a position in a single block instead of waiting an epoch.
+Solana's stake program enforces a deactivation period that ends at the next epoch boundary (up to about a day, one epoch, roughly 25.5 hours). Hubra's instant unstake routes around it through Sanctum's shared LST liquidity layer, so you can exit a position in a single block instead of waiting an epoch.
 
 This page covers what's actually happening on-chain, which Sanctum endpoint each path uses, and how to wire the calls programmatically.
 
@@ -245,7 +245,7 @@ For raSOL specifically, pooled liquidity is deep enough that price impact stays 
 | --- | --- | --- | --- | --- |
 | Native instant | None | Price impact (dynamic) | Covered by Hubra | — |
 | raSOL instant | None | Price impact (dynamic) | Covered by Hubra | — |
-| raSOL slow | None | None | Covered by Hubra | Epoch wait (~2 to 3d) |
+| raSOL slow | None | None | Covered by Hubra | Epoch wait (up to ~1 day) |
 | Partial native instant | None | Price impact on the slice | Covered by Hubra | ~0.002 SOL rent for the split account (covered) |
 | USDC instant | None | None | Covered by Hubra | — |
 
@@ -313,7 +313,7 @@ For native instant, replace `strategy` with `"sol-native-stake"` and add `stakeA
   </Accordion>
 
   <Accordion title="Why use slow if instant works?">
-    Slow has zero cost. If you can wait 2 to 3 days, there is no reason to pay price impact. Instant exists for the cases where waiting is not an option.
+    Slow has zero cost. If you can wait up to about a day (one epoch), there is no reason to pay price impact. Instant exists for the cases where waiting is not an option.
   </Accordion>
 
   <Accordion title="What happens if my Sanctum order expires before I broadcast?">

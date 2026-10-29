@@ -21,7 +21,7 @@ Native staking is the cleanest delegation route on Solana. Your wallet creates a
     The stake account is delegated to Hubra's validator at vote identity `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh`. Voting rights move to Hubra; everything else stays with the wallet.
   </Step>
   <Step title="Activate over the next epoch">
-    Stake activates at the next epoch boundary (typically within one epoch, about 2 to 3 days). Once active, it earns rewards each epoch.
+    Stake activates at the next epoch boundary (within one epoch, currently about a day; the first reward lands after roughly 1 to 2 epochs, about 25 to 51 hours). Once active, it earns rewards each epoch.
   </Step>
   <Step title="Rewards compound automatically">
     Solana's stake program adds epoch rewards directly to the stake account. There is nothing to claim, no harvest cycle, no transactions to sign. Compounding is built into the protocol.
@@ -64,7 +64,7 @@ Two paths:
 
 ### Slow (epoch-bounded, no fee)
 
-`StakeProgram.deactivate` begins the cooldown. Once the deactivation epoch passes (~2 to 3 days), the stake account is `inactive` and you can withdraw the SOL.
+`StakeProgram.deactivate` begins the cooldown. Once the next epoch boundary passes (anywhere from minutes up to about a day, one epoch, roughly 25.5 hours), the stake account is `inactive` and you can withdraw the SOL.
 
 This is the cleanest exit. No fee, no liquidity dependency, no third-party protocol.
 

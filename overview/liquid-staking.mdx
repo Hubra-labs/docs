@@ -62,8 +62,8 @@ You keep validator-backed exposure even while raSOL is sitting in a lending mark
 | Smart-contract exposure | None | Sanctum |
 | Transferable | No | Yes (SPL token) |
 | Use in DeFi | No | Yes |
-| Activation delay | ~2 to 3 days | Instant (you receive raSOL on stake) |
-| Slow exit | ~2 to 3 days, no fee | ~2 to 3 days, no Hubra fee |
+| Activation delay | Up to ~1 day (next epoch boundary) | Instant (you receive raSOL on stake) |
+| Slow exit | Up to ~1 day, no fee | Up to ~1 day, no Hubra fee |
 | Fast exit | Sanctum `depositStake`, price impact | Sanctum swap, price impact |
 
 Both routes back the same validator. The choice is about whether you need composability.
@@ -92,7 +92,7 @@ raSOL → SOL via Sanctum's pooled LST liquidity. Settles in a block. Pays price
 
 ### Slow (epoch-bounded, no fee)
 
-Sanctum's `withdrawStake` converts your raSOL into a native stake account. Then standard `StakeProgram.deactivate` runs the epoch cooldown. About 2 to 3 days total, no fee.
+Sanctum's `withdrawStake` converts your raSOL into a native stake account. Then standard `StakeProgram.deactivate` runs the epoch cooldown. The stake account finishes deactivating at the next epoch boundary (up to about a day, one epoch, roughly 25.5 hours), then you withdraw the SOL in one more transaction. No fee.
 
 ### Sell on a DEX
 

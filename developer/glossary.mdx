@@ -25,10 +25,10 @@ A specific Solana program account holding delegated stake. Created fresh each ti
 A Solana program account a validator publishes votes to. Hubra's vote account is `7K8DVxtNJGnMtUY1CQJT5jcs8sFGSZTDiG7kowvFpECh`. Stake accounts delegate to a vote account.
 
 ### Epoch
-Solana's unit of time, ~2 to 3 days. Stake activation, deactivation, and reward settlement are bounded by epoch transitions.
+Solana's unit of time, 432,000 slots (currently about 25.5 hours, just over a day). Stake activation, deactivation, and reward settlement are bounded by epoch transitions.
 
 ### Slot
-A leader-assigned time interval on Solana, ~400ms target. An epoch is approximately 432,000 slots.
+A leader-assigned time interval on Solana, currently about 210 to 213 ms. An epoch is approximately 432,000 slots.
 
 ---
 
@@ -54,7 +54,7 @@ SOL per receipt. raSOL trades > 1 SOL/raSOL once it has accrued rewards.
 `StakeProgram.deactivate`. Begins the epoch-bounded cooldown on a stake account. Account becomes withdrawable after the deactivation epoch passes (typically 1 epoch, worst case 2).
 
 ### Slow unstake (LST)
-Convert raSOL → native stake account via Sanctum's `withdrawStake`. Then deactivate normally. Combined ~2 to 3 days settlement.
+Convert raSOL → native stake account via Sanctum's `withdrawStake`. Then deactivate normally. Settles at the next epoch boundary, up to about a day (one epoch, roughly 25.5 hours).
 
 ### Instant unstake (LST)
 Swap raSOL → SOL via routed liquidity (Sanctum's swap router). Pays a small price-impact fee but settles in a block.
