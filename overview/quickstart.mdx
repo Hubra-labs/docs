@@ -33,7 +33,7 @@ Three paths, depending on the strategy:
 
 - **Native, slow:** Standard `StakeProgram.deactivate`. Account becomes withdrawable after the deactivation epoch (about 2 to 3 days). No fee.
 - **Native, instant:** Routed through Sanctum's `depositStake`. Active stake settles to SOL in one transaction. Pays a price-impact fee to the LST liquidity pool.
-- **Liquid, instant:** Swap raSOL → SOL through Sanctum's pooled LST liquidity. One transaction, pays price impact only.
+- **Liquid, instant:** Swap raSOL → SOL through Sanctum's pooled LST liquidity. One transaction, pays Sanctum's pool fees and price impact; Hubra adds no fee.
 - **Liquid, slow:** `withdrawStake` to a native stake account, then standard epoch deactivation.
 - **USDC, instant:** Voltr direct withdraw. No cooldown, no fee.
 

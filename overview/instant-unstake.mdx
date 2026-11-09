@@ -8,7 +8,7 @@ Solana's stake program enforces a 2 to 3 day deactivation period. Hubra's instan
 This page covers what's actually happening on-chain, which Sanctum endpoint each path uses, and how to wire the calls programmatically.
 
 <Info>
-  Hubra charges no protocol fee on unstake. Cost is **price impact only**, dynamic and quoted live by Sanctum, starting from around 0.05% in healthy markets.
+  Hubra charges no protocol fee on unstake. The cost is set by Sanctum and quoted live: for raSOL it includes the raSOL stake pool's 0.1% withdrawal fee plus Sanctum's routing cost or price impact. Quote first to see the exact SOL you receive.
 </Info>
 
 ---
@@ -94,7 +94,7 @@ The transaction:
 
 You then run `StakeProgram.deactivate` manually (or via [`POST /api/v1/unstake`](/developer/endpoints/unstake) with `kind: "deactivate"`), wait for the deactivation epoch, and call [`POST /api/v1/withdraw`](/developer/endpoints/withdraw) to close the account.
 
-No fee, no price impact. Costs the same epoch wait as native staking.
+No Hubra fee and no price impact. The raSOL stake pool's 0.1% withdrawal fee still applies when your raSOL is burned. Costs the same epoch wait as native staking.
 
 ---
 
@@ -244,12 +244,12 @@ For raSOL specifically, pooled liquidity is deep enough that price impact stays 
 | Path | Hubra fee | Sanctum fee | Network fee | Other |
 | --- | --- | --- | --- | --- |
 | Native instant | None | Price impact (dynamic) | Paid by your wallet | — |
-| raSOL instant | None | Price impact (dynamic) | Paid by your wallet | — |
-| raSOL slow | None | None | Paid by your wallet | Epoch wait (~2 to 3d) |
+| raSOL instant | None | 0.1% pool withdrawal fee plus routing cost (dynamic) | Paid by your wallet | None |
+| raSOL slow | None | 0.1% pool withdrawal fee | Paid by your wallet | Epoch wait (~2 to 3d) |
 | Partial native instant | None | Price impact on the slice | Paid by your wallet | ~0.002 SOL rent for the split account (paid by your wallet) |
 | USDC instant | None | None | Paid by your wallet | — |
 
-Price impact comes from the depth of Sanctum's pool at the moment the swap runs. Hubra adds nothing on top. The number you see in the quote is what you pay.
+The Sanctum cost comes from pool fees and the depth of Sanctum's pool at the moment the swap runs. Hubra adds nothing on top. The number you see in the quote is what you pay.
 
 ---
 
@@ -301,7 +301,7 @@ For native instant, replace `strategy` with `"sol-native-stake"` and add `stakeA
 
 <AccordionGroup>
   <Accordion title="Why is the SOL output less than what I unstaked?">
-    Sanctum's pool charges price impact for absorbing your stake or your raSOL. Hubra adds nothing on top. Larger unstakes consume more pool liquidity and incur higher impact.
+    Sanctum's route charges pool fees and price impact for absorbing your stake or your raSOL (for raSOL, this includes the stake pool's 0.1% withdrawal fee). Hubra adds nothing on top. Larger unstakes consume more pool liquidity and incur higher impact.
   </Accordion>
 
   <Accordion title="Is there a minimum?">
