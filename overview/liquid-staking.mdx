@@ -41,7 +41,7 @@ raSOL mint address: `HUBsveNpjo5pWqNkH57QzxjQASdTVXcSK7bVKTSZtcSX`. Verify on [S
 
 Native staking locks the position; liquid staking does not. With raSOL you can:
 
-- **Swap or sell** at any time on any Solana DEX (Jupiter, Orca, Meteora, Raydium, Titan).
+- **Swap or sell** at any time through Jupiter or Sanctum. raSOL also trades on Solana DEXs such as Orca.
 - **Use as collateral** on Kamino, Save, Loopscale.
 - **Provide liquidity** in raSOL pairs.
 - **Move it** between wallets and accounts as a normal SPL token.
@@ -63,8 +63,8 @@ You keep validator-backed exposure even while raSOL is sitting in a lending mark
 | Transferable | No | Yes (SPL token) |
 | Use in DeFi | No | Yes |
 | Activation delay | ~2 to 3 days | Instant (you receive raSOL on stake) |
-| Slow exit | ~2 to 3 days, no fee | ~2 to 3 days, no Hubra fee |
-| Fast exit | Sanctum `depositStake`, price impact | Sanctum swap, price impact |
+| Slow exit | ~2 to 3 days, no fee | ~2 to 3 days, no Hubra fee (0.1% pool withdrawal fee) |
+| Fast exit | Sanctum `depositStake`, price impact | Sanctum swap, pool fees and price impact |
 
 Both routes back the same validator. The choice is about whether you need composability.
 
@@ -88,11 +88,11 @@ Three paths:
 
 ### Instant (one transaction)
 
-raSOL → SOL via Sanctum's pooled LST liquidity. Settles in a block. Pays price impact only; Hubra charges no protocol fee.
+raSOL → SOL via Sanctum's pooled LST liquidity. Settles in a block. Pays Sanctum's pool fees and price impact, including the raSOL stake pool's 0.1% withdrawal fee; Hubra charges no protocol fee.
 
-### Slow (epoch-bounded, no fee)
+### Slow (epoch-bounded, no Hubra fee)
 
-Sanctum's `withdrawStake` converts your raSOL into a native stake account. Then standard `StakeProgram.deactivate` runs the epoch cooldown. About 2 to 3 days total, no fee.
+Sanctum's `withdrawStake` converts your raSOL into a native stake account. Then standard `StakeProgram.deactivate` runs the epoch cooldown. About 2 to 3 days total. No Hubra fee; the raSOL stake pool's 0.1% withdrawal fee applies.
 
 ### Sell on a DEX
 
@@ -125,7 +125,7 @@ Liquid staking adds a layer of complexity over native. Know the trade-offs:
   </Accordion>
 
   <Accordion title="Do I need SOL for gas?">
-    No. Hubra covers all network fees on the staking and unstaking flows.
+    Yes, a small amount. Your wallet is the fee payer on the staking and unstaking transactions.
   </Accordion>
 
   <Accordion title="Can I use raSOL outside of Hubra?">
